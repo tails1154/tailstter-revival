@@ -1332,7 +1332,10 @@
     throw v0
 
     :pswitch_1
-    sget-object v0, Lcom/twitter/android/provider/ai;->i:Landroid/net/Uri;
+    # Use the broad timeline view for the replacement Home feed. The legacy
+    # home view groups rows by the original Twitter owner id and hides
+    # federated authors even though sync returned them.
+    sget-object v0, Lcom/twitter/android/provider/ai;->j:Landroid/net/Uri;
 
     iput-object v0, p0, Lcom/twitter/android/TimelineActivity;->b:Landroid/net/Uri;
 
