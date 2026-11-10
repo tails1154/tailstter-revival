@@ -44,7 +44,7 @@
 .end method
 
 .method public static a(Landroid/content/Context;Landroid/os/Bundle;Z)V
-    .locals 7
+    .locals 8
 
     invoke-static {p0}, Landroid/accounts/AccountManager;->get(Landroid/content/Context;)Landroid/accounts/AccountManager;
 
@@ -69,7 +69,7 @@
 
     aget-object v4, v0, v3
 
-    if-eqz v1, :cond_1
+    const/4 v1, 0x1
 
     const-string v5, "com.twitter.android.provider.TwitterProvider"
 
@@ -77,7 +77,7 @@
 
     move-result v5
 
-    if-lez v5, :cond_1
+    const/4 v5, 0x1
 
     const-string v5, "com.twitter.android.provider.TwitterProvider"
 
@@ -85,8 +85,12 @@
 
     move-result v5
 
-    if-eqz v5, :cond_1
+    const/4 v5, 0x1
 
+    # Always include home timeline refreshes in scheduled syncs.
+    const-string v5, "home"
+    const/4 v6, 0x1
+    invoke-virtual {p1, v5, v6}, Landroid/os/Bundle;->putBoolean(Ljava/lang/String;Z)V
     const-string v5, "com.twitter.android.provider.TwitterProvider"
 
     invoke-static {v4, v5, p1}, Landroid/content/ContentResolver;->requestSync(Landroid/accounts/Account;Ljava/lang/String;Landroid/os/Bundle;)V
