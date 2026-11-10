@@ -1,0 +1,22 @@
+[Unit]
+Description=Tailstter Bluesky bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/tailstter
+ExecStart=/usr/bin/python3 -u %h/.local/share/tailstter/app.py
+Environment=TAILSTTER_HOST=0.0.0.0
+Environment=TAILSTTER_PORT=6483
+Environment=TAILSTTER_DB=%h/.local/share/tailstter/bridge.sqlite3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=%h/.local/share/tailstter
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

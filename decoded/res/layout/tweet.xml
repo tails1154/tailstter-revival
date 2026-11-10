@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout android:layout_width="fill_parent" android:layout_height="fill_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:twitter="http://schemas.android.com/apk/res/com.twitter.android">
+    <include android:id="@id/navbar" layout="@layout/navbar" />
+    <FrameLayout android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_above="@id/actionbar" android:layout_below="@id/navbar">
+        <RelativeLayout android:id="@id/badge" android:background="@drawable/badge_bg" android:paddingLeft="7.0dip" android:paddingTop="7.0dip" android:paddingRight="10.0dip" android:focusable="true" android:clickable="true" android:layout_width="fill_parent" android:layout_height="wrap_content" android:minHeight="@dimen/badge_height" android:onClick="onClickHandler">
+            <ImageView android:id="@id/profile_image" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/ic_no_profile_photo" android:scaleType="center" />
+            <RelativeLayout android:gravity="center_vertical" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="10.0dip" android:layout_marginRight="10.0dip" android:layout_toLeftOf="@id/chevron" android:layout_toRightOf="@id/profile_image" android:layout_alignTop="@id/profile_image" android:layout_alignBottom="@id/profile_image">
+                <include layout="@layout/user_profile_name" />
+            </RelativeLayout>
+            <ImageView android:id="@id/chevron" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/ic_chevron" android:layout_alignParentRight="true" android:layout_centerVertical="true" />
+        </RelativeLayout>
+        <ScrollView android:id="@id/content_area" android:fadingEdge="none" android:layout_width="fill_parent" android:layout_height="wrap_content">
+            <RelativeLayout android:layout_width="fill_parent" android:layout_height="wrap_content">
+                <View android:id="@id/spacer" android:background="@drawable/tweet_details_divider" android:clickable="true" android:layout_width="fill_parent" android:layout_height="wrap_content" android:minHeight="@dimen/badge_height" />
+                <LinearLayout android:orientation="vertical" android:background="@android:color/white" android:padding="10.0dip" android:layout_width="fill_parent" android:layout_height="fill_parent" android:layout_below="@id/spacer">
+                    <TextView android:id="@id/content" android:layout_width="fill_parent" android:layout_height="wrap_content" style="@style/TweetContent" />
+                    <Button android:id="@id/promoted_tweet" android:tag="http://mobile.twitter.com/tos/promoted" android:background="@drawable/promoted_pill" android:onClick="onClickHandler" style="@style/Pill" />
+                    <TextView android:id="@id/byline" android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Byline" />
+                    <TextView android:id="@id/retweet" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Byline" />
+                    <RelativeLayout android:id="@id/image_preview" android:paddingTop="10.0dip" android:paddingBottom="6.0dip" android:visibility="gone" android:layout_width="fill_parent" android:layout_height="wrap_content" />
+                    <com.twitter.android.widget.OverlayImageView android:id="@id/map" android:visibility="gone" android:layout_height="@dimen/inline_map_height" android:onClick="onClickHandler" twitter:overlayDrawable="@drawable/image_overlay" style="@style/Map" />
+                    <TextView android:id="@id/location" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Byline" />
+                    <Button android:textSize="15.0sp" android:layout_gravity="right" android:id="@id/in_reply_to" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="6.0dip" android:text="@string/in_reply_to" android:onClick="onClickHandler" style="@style/Button" />
+                </LinearLayout>
+            </RelativeLayout>
+        </ScrollView>
+    </FrameLayout>
+    <LinearLayout android:id="@id/actionbar" android:layout_alignParentBottom="true" style="@style/Toolbar">
+        <ImageButton android:id="@id/reply" android:layout_width="fill_parent" android:layout_height="wrap_content" android:src="@drawable/swipe_reply" android:layout_weight="0.25" android:onClick="onClickHandler" style="@style/Button.Action" />
+        <ImageButton android:id="@id/retweet" android:layout_width="fill_parent" android:layout_height="wrap_content" android:src="@drawable/swipe_retweet" android:layout_weight="0.25" android:onClick="onClickHandler" style="@style/Button.Action" />
+        <ImageButton android:id="@id/delete" android:visibility="gone" android:layout_width="fill_parent" android:layout_height="wrap_content" android:src="@drawable/swipe_delete" android:layout_weight="0.25" android:onClick="onClickHandler" style="@style/Button.Action" />
+        <ImageButton android:id="@id/favorite" android:layout_width="fill_parent" android:layout_height="wrap_content" android:src="@drawable/swipe_fav_off" android:layout_weight="0.25" android:onClick="onClickHandler" style="@style/Button.Action" />
+        <ImageButton android:id="@id/share" android:layout_width="fill_parent" android:layout_height="wrap_content" android:src="@drawable/swipe_share" android:layout_weight="0.25" android:onClick="onClickHandler" style="@style/Button.Action" />
+    </LinearLayout>
+</RelativeLayout>

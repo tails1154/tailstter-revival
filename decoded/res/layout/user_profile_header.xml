@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout android:paddingTop="12.0dip" android:paddingBottom="12.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <RelativeLayout android:id="@id/badge" android:paddingLeft="14.0dip" android:paddingRight="14.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content">
+        <ImageView android:id="@id/profile_image" android:focusable="true" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/ic_no_profile_photo" android:scaleType="center" android:onClick="onClickHandler" />
+        <RelativeLayout android:gravity="center_vertical" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="10.0dip" android:layout_marginRight="10.0dip" android:layout_toRightOf="@id/profile_image" android:layout_alignTop="@id/profile_image" android:layout_alignBottom="@id/profile_image">
+            <include layout="@layout/user_profile_name" />
+        </RelativeLayout>
+    </RelativeLayout>
+    <RelativeLayout android:id="@id/button_bar" android:layout_width="fill_parent" android:layout_height="52.0dip" android:layout_below="@id/badge" style="@style/ButtonBar">
+        <ProgressBar android:id="@id/button_bar_progress" android:layout_width="wrap_content" android:layout_height="wrap_content" android:indeterminate="true" android:layout_centerInParent="true" style="?android:attr/progressBarStyleSmall" />
+        <Button android:id="@id/button_bar_action" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:drawablePadding="6.0dip" android:onClick="onClickHandler" style="@style/Button" />
+        <ImageButton android:id="@id/button_bar_more" android:paddingTop="1.0dip" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/ic_profile_menu" android:layout_alignParentRight="true" android:onClick="onClickHandler" style="@style/Button" />
+    </RelativeLayout>
+    <TextView android:textAppearance="?android:textAppearanceSmall" android:textColor="@color/text_color" android:id="@id/friendship_label" android:visibility="invisible" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_below="@id/button_bar" android:layout_centerHorizontal="true" />
+</RelativeLayout>

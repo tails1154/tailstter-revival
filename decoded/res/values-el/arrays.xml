@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="refresh_intervals">
+        <item>5 λεπτά</item>
+        <item>10 λεπτά</item>
+        <item>15 λεπτά</item>
+        <item>30 λεπτά</item>
+        <item>1 ώρα</item>
+        <item>2 ώρες</item>
+        <item>4 ώρες</item>
+    </string-array>
+</resources>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:id="@id/root_layout" android:layout_width="fill_parent" android:layout_height="fill_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <include layout="@layout/branded_header" />
+    <ScrollView android:orientation="vertical" android:layout_width="fill_parent" android:layout_height="fill_parent" android:layout_weight="1.0">
+        <LinearLayout android:orientation="vertical" android:layout_width="fill_parent" android:layout_height="fill_parent">
+            <TextView android:textSize="18.0sp" android:textColor="@color/settings_header_color" android:id="@id/wizard_title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="15.0dip" android:layout_marginTop="15.0dip" android:layout_marginRight="15.0dip" android:layout_marginBottom="15.0dip" android:text="@string/wizard_start_adding_an_account" />
+            <View android:background="@drawable/list_rule" android:layout_width="fill_parent" android:layout_height="1.0px" />
+            <TextView android:textSize="16.0sp" android:textColor="@color/text_color" android:id="@id/wizard_content" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="15.0dip" android:layout_marginTop="15.0dip" android:layout_marginRight="15.0dip" android:text="@string/wizard_start_content" />
+        </LinearLayout>
+    </ScrollView>
+    <LinearLayout android:orientation="horizontal" style="@style/Toolbar">
+        <Button android:id="@id/btn_back" android:visibility="invisible" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_weight="0.5" style="@style/Button" />
+        <Button android:id="@id/btn_next" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="@string/next" android:drawableRight="@drawable/ic_btn_next" android:layout_weight="0.5" android:onClick="onClickHandler" style="@style/Button" />
+    </LinearLayout>
+</LinearLayout>

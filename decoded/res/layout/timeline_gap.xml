@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout android:background="@drawable/list_row_background" android:layout_width="fill_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <ImageView android:layout_width="fill_parent" android:layout_height="wrap_content" android:src="@drawable/timeline_gap_bg" android:scaleType="fitXY" />
+    <TextView android:textSize="10.0sp" android:textStyle="bold" android:textColor="@color/text_color" android:gravity="center" android:id="@id/gap_text" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/tap_to_load_tweets" android:layout_centerInParent="true" style="@style/InsetText" />
+    <ProgressBar android:id="@id/progress" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_centerInParent="true" style="?android:attr/progressBarStyleSmall" />
+</RelativeLayout>

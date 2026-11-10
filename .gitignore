@@ -1,0 +1,12 @@
+# Never publish the development APK private key.
+signing/
+
+# Runtime state and Python caches.
+backend/*.sqlite3
+backend/*.sqlite3-*
+backend/__pycache__/
+scripts/__pycache__/
+*.py[cod]
+
+# Temporary build output.
+output/*unsigned*.apk

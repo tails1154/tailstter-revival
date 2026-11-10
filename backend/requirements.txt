@@ -1,0 +1,1 @@
+# No third-party Python dependencies; the service uses Python's standard library.

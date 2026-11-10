@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="time_secs">
+        <item quantity="other">%d sec</item>
+        <item quantity="one">1 sec</item>
+    </plurals>
+    <plurals name="time_secs_long">
+        <item quantity="other">%d secondi fa</item>
+        <item quantity="one">1 secondo fa</item>
+    </plurals>
+    <plurals name="time_mins">
+        <item quantity="other">%d min</item>
+        <item quantity="one">1 min</item>
+    </plurals>
+    <plurals name="time_mins_long">
+        <item quantity="other">%d minuti fa</item>
+        <item quantity="one">1 minuto fa</item>
+    </plurals>
+    <plurals name="time_hours">
+        <item quantity="other">%d ore</item>
+        <item quantity="one">1 ora</item>
+    </plurals>
+    <plurals name="time_hours_long">
+        <item quantity="other">%d ore fa</item>
+        <item quantity="one">1 ora fa</item>
+    </plurals>
+    <plurals name="retweet_count">
+        <item quantity="other">Ritwittato da %d persone</item>
+        <item quantity="one">Ritwittato da 1 persona</item>
+    </plurals>
+    <plurals name="people">
+        <item quantity="other">persone</item>
+        <item quantity="one">persona</item>
+    </plurals>
+    <plurals name="found_people">
+        <item quantity="other">&lt;b>%d persone&lt;/b> trovate dai tuoi contatti.</item>
+        <item quantity="one">&lt;b>1 persona&lt;/b> trovata dai tuoi contatti.</item>
+    </plurals>
+</resources>

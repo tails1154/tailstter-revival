@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="titlebar_height">44.0dip</dimen>
+    <dimen name="inline_map_height">100.0dip</dimen>
+    <dimen name="map_height">150.0dip</dimen>
+    <dimen name="pill_side_padding">5.0dip</dimen>
+    <dimen name="badge_height">80.0dip</dimen>
+    <dimen name="toolbar_button_width">160.0dip</dimen>
+    <dimen name="image_preview_margin_left">0.0dip</dimen>
+    <dimen name="image_preview_margin_top">0.0dip</dimen>
+    <dimen name="image_preview_margin_right">0.0dip</dimen>
+    <dimen name="image_preview_margin_bottom">10.0dip</dimen>
+</resources>

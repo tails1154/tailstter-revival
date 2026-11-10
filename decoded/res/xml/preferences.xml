@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <PreferenceCategory android:title="@string/settings_general_settings">
+        <ListPreference android:entries="@array/contacts_sync" android:title="@string/settings_sync_contacts" android:key="sync_contacts" android:defaultValue="2" android:entryValues="@array/contacts_sync_values" />
+        <CheckBoxPreference android:title="@string/settings_sync_data_title" android:key="sync_data" />
+        <ListPreference android:entries="@array/refresh_intervals" android:title="@string/settings_polling_interval_title" android:key="polling_interval" android:dependency="sync_data" android:defaultValue="15" android:entryValues="@array/refresh_interval_values" />
+    </PreferenceCategory>
+    <PreferenceCategory android:title="@string/settings_notifications_title">
+        <CheckBoxPreference android:title="@string/settings_notif_timeline_title" android:key="notif_timeline" android:dependency="sync_data" android:defaultValue="false" />
+        <CheckBoxPreference android:title="@string/settings_notif_mentions_title" android:key="notif_mentions" android:dependency="sync_data" android:defaultValue="true" />
+        <CheckBoxPreference android:title="@string/settings_notif_direct_messages_title" android:key="notif_direct_messages" android:dependency="sync_data" android:defaultValue="true" />
+        <CheckBoxPreference android:title="@string/settings_vibrate_title" android:key="vibrate" android:summary="@string/settings_vibrate_summary" android:dependency="sync_data" />
+        <CheckBoxPreference android:title="@string/settings_use_led_title" android:key="use_led" android:summary="@string/settings_use_led_summary" android:dependency="sync_data" />
+        <RingtonePreference android:title="@string/settings_ringtone_title" android:key="ringtone" android:summary="@string/settings_ringtone_summary" android:dependency="sync_data" android:ringtoneType="notification" android:showDefault="true" android:showSilent="true" />
+    </PreferenceCategory>
+    <PreferenceCategory android:title="@string/settings_other">
+        <CheckBoxPreference android:title="@string/settings_sound_effects" android:key="sound_effects" android:defaultValue="true" />
+        <ListPreference android:entries="@array/photo_services" android:title="@string/settings_photo_upload_services_title" android:key="photo_service" android:defaultValue="0" android:entryValues="@array/photo_service_values" />
+        <ListPreference android:entries="@array/font_sizes" android:title="@string/settings_font_size" android:key="font_size" android:defaultValue="14" android:entryValues="@array/font_sizes_values" />
+    </PreferenceCategory>
+    <PreferenceCategory android:title="@string/login_about">
+        <Preference android:title="@string/login_about" android:key="about" android:summary="@string/about_summary" />
+    </PreferenceCategory>
+</PreferenceScreen>

@@ -1,0 +1,65 @@
+#!/bin/sh
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+TMP=$(mktemp -d)
+trap 'python3 -c "from pathlib import Path; p=Path(\"$TMP\"); [f.unlink() for f in p.iterdir() if f.is_file()]; p.rmdir()"' EXIT INT TERM
+TAILSTTER_TEST_DB="$TMP/test.sqlite3" PYTHONPATH="$ROOT" python3 - <<'PY'
+import os
+from pathlib import Path
+from urllib.parse import parse_qs
+import backend.app as api
+api.DB_PATH=Path(os.environ['TAILSTTER_TEST_DB'])
+feed_item={'post':{'uri':'at://did:plc:alice/app.bsky.feed.post/abc','cid':'cidabc','indexedAt':'2025-01-01T00:00:00Z','record':{'text':'A Bluesky post','createdAt':'2025-01-01T00:00:00Z'},'author':{'did':'did:plc:alice','handle':'alice.bsky.social','displayName':'Alice'}}}
+calls=[]
+expired_once=True
+def fake_at(service,method,endpoint,params=None,body=None,token=None):
+    global expired_once
+    calls.append((method,endpoint,params,body))
+    if endpoint.endswith('createSession'):
+        assert body=={'identifier':'alice.bsky.social','password':'app-password'}
+        return {'did':'did:plc:alice','handle':'alice.bsky.social','accessJwt':'jwt-access','refreshJwt':'jwt-refresh'}
+    if endpoint.endswith('refreshSession'): return {'accessJwt':'jwt-renewed','refreshJwt':'jwt-refresh-2'}
+    if endpoint.endswith('getTimeline'):
+        if expired_once:
+            expired_once=False
+            raise api.BridgeError(401,'expired')
+        return {'feed':[feed_item]}
+    if endpoint.endswith('getAuthorFeed'): return {'feed':[feed_item]}
+    if endpoint.endswith('searchPosts'): return {'posts':[feed_item['post']]}
+    if endpoint.endswith('getProfile'): return {'did':'did:plc:alice','handle':'alice.bsky.social','displayName':'Alice','followersCount':2,'followsCount':3,'postsCount':4}
+    if endpoint.endswith('createRecord'): return {'uri':'at://did:plc:alice/'+body['collection']+'/record1','cid':'recordcid'}
+    if endpoint.endswith('listRecords'): return {'records':[]}
+    if endpoint.endswith('deleteRecord'): return {}
+    raise AssertionError('unexpected AT call '+endpoint)
+api.at_request=fake_at
+api.public=lambda endpoint,params=None: fake_at(api.BSKY_PUBLIC,'GET',endpoint,params)
+class Request:
+    command='GET'
+    headers={}
+    def body(self): return {}
+def call(path,command='GET',params=None,token=None):
+    r=Request(); r.command=command; r.headers={'Authorization':token} if token else {}
+    c=api.connect()
+    try:
+        result=api.Handler.route(r,c,path,{k:[v] for k,v in (params or {}).items()})
+        c.commit()
+        if path=='/oauth/access_token': return result
+        return result[1] if isinstance(result,tuple) else result
+    finally: c.close()
+code,raw,ctype=call('/oauth/access_token','POST',{'x_auth_mode':'client_auth','x_auth_username':'@alice.bsky.social','x_auth_password':'app-password'})
+assert code==200 and ctype=='application/x-www-form-urlencoded'
+oauth=parse_qs(raw.decode()); token=oauth['oauth_token'][0]
+auth='OAuth realm="Tailstter", oauth_token="'+token+'", oauth_signature_method="HMAC-SHA1"'
+profile=call('/1/account/verify_credentials.json',token=auth)
+assert profile['screen_name']=='alice.bsky.social'
+created=call('/1/statuses/update.json','POST',{'status':'A new post'},auth)
+assert created['text']=='A new post' and calls[-1][1]=='com.atproto.repo.createRecord'
+timeline=call('/1/statuses/home_timeline.json',token=auth)
+assert timeline[0]['text']=='A Bluesky post'
+assert any(x[1]=='com.atproto.server.refreshSession' for x in calls)
+assert call('/1/statuses/user_timeline.json',params={'screen_name':'alice.bsky.social'},token=auth)[0]['text']=='A Bluesky post'
+assert call('/1/search/tweets.json',params={'q':'Bluesky'},token=auth)['statuses'][0]['text']=='A Bluesky post'
+assert call('/1/users/show.json',params={'screen_name':'alice.bsky.social'},token=auth)['screen_name']=='alice.bsky.social'
+assert call('/1/friendships/create.json','POST',{'screen_name':'alice.bsky.social'},auth)['following']
+print('Tailstter bridge tests passed: XAuth-to-AT session, profile, AT post, timeline, author feed, search, and follow mapping')
+PY

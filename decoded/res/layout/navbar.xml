@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.twitter.android.widget.Navbar style="?attr/navbarStyle"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <TextView android:id="@id/title" android:layout_toLeftOf="@id/title_sep_2" style="@style/NavbarTitle.Text" />
+    <ImageView android:id="@id/title_sep_2" android:layout_toLeftOf="@id/title_button_2" style="@style/NavbarSep" />
+    <ImageButton android:id="@id/title_button_2" android:src="@drawable/ic_nav_search" android:layout_toLeftOf="@id/title_sep_3" style="@style/NavbarBtn" />
+    <ImageView android:id="@id/title_sep_3" android:layout_toLeftOf="@id/title_button_3" style="@style/NavbarSep" />
+    <ImageButton android:id="@id/title_button_3" android:src="@drawable/ic_nav_compose" android:layout_alignParentRight="true" style="@style/NavbarBtn" />
+</com.twitter.android.widget.Navbar>

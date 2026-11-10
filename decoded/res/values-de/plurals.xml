@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="time_secs">
+        <item quantity="other">%d sek</item>
+        <item quantity="one">1 sek</item>
+    </plurals>
+    <plurals name="time_secs_long">
+        <item quantity="other">vor %d sekunden</item>
+        <item quantity="one">vor 1 sekunde</item>
+    </plurals>
+    <plurals name="time_mins">
+        <item quantity="other">%d min</item>
+        <item quantity="one">1 min</item>
+    </plurals>
+    <plurals name="time_mins_long">
+        <item quantity="other">vor %d minuten</item>
+        <item quantity="one">vor 1 minute</item>
+    </plurals>
+    <plurals name="time_hours">
+        <item quantity="other">%d stunden</item>
+        <item quantity="one">1 stunde</item>
+    </plurals>
+    <plurals name="time_hours_long">
+        <item quantity="other">vor %d stunden</item>
+        <item quantity="one">vor 1 stunde</item>
+    </plurals>
+    <plurals name="retweet_count">
+        <item quantity="other">Retweetet von %d Personen</item>
+        <item quantity="one">Retweetet von einer Person</item>
+    </plurals>
+    <plurals name="people">
+        <item quantity="other">Leute</item>
+        <item quantity="one">Person</item>
+    </plurals>
+    <plurals name="found_people">
+        <item quantity="other">&lt;b>%d Leute&lt;/b> aus deinen Kontakten gefunden.</item>
+        <item quantity="one">&lt;b>Eine Person&lt;/b> aus deinen Kontakten gefunden.</item>
+    </plurals>
+</resources>

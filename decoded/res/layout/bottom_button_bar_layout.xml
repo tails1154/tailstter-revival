@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="horizontal" android:visibility="gone" style="@style/Toolbar"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <Button android:id="@id/btn_left" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginRight="5.0dip" android:layout_weight="0.5" android:onClick="onClickHandler" style="@style/Button" />
+    <Button android:id="@id/btn_right" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginLeft="5.0dip" android:layout_weight="0.5" android:onClick="onClickHandler" style="@style/Button" />
+</LinearLayout>

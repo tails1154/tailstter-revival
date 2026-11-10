@@ -1,0 +1,26 @@
+!!brut.androlib.meta.MetaInfo
+apkFileName: twitter.apk
+compressionType: false
+doNotCompress:
+- resources.arsc
+- png
+- m4a
+isFrameworkApk: false
+packageInfo:
+  forcedPackageId: '127'
+  renameManifestPackage: null
+sdkInfo:
+  minSdkVersion: '7'
+  targetSdkVersion: '8'
+sharedLibrary: false
+sparseResources: false
+unknownFiles:
+  org/codehaus/jackson/impl/VERSION.txt: '8'
+usesFramework:
+  ids:
+  - 1
+  tag: null
+version: 2.7.0-dirty
+versionInfo:
+  versionCode: '130'
+  versionName: 2.0.3

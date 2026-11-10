@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="time_secs">
+        <item quantity="other">%d초</item>
+        <item quantity="one">1초</item>
+    </plurals>
+    <plurals name="time_secs_long">
+        <item quantity="other">%d초 전</item>
+        <item quantity="one">1초 전</item>
+    </plurals>
+    <plurals name="time_mins">
+        <item quantity="other">%d분</item>
+        <item quantity="one">1분</item>
+    </plurals>
+    <plurals name="time_mins_long">
+        <item quantity="other">%d분 전</item>
+        <item quantity="one">1분 전</item>
+    </plurals>
+    <plurals name="time_hours">
+        <item quantity="other">%d시간</item>
+        <item quantity="one">1시간</item>
+    </plurals>
+    <plurals name="time_hours_long">
+        <item quantity="other">%d시간 전</item>
+        <item quantity="one">1시간 전</item>
+    </plurals>
+    <plurals name="retweet_count">
+        <item quantity="other">%d명이 리트윗함</item>
+        <item quantity="one">1명이 리트윗함</item>
+    </plurals>
+    <plurals name="people">
+        <item quantity="other">명</item>
+        <item quantity="one">명</item>
+    </plurals>
+    <plurals name="found_people">
+        <item quantity="other">연락처에서 &lt;b>%d명&lt;/b> 을 찾았습니다.</item>
+        <item quantity="one">연락처에서 &lt;b>1명&lt;/b> 을 찾았습니다.</item>
+    </plurals>
+</resources>

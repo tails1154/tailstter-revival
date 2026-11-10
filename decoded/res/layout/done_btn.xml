@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Button android:background="@drawable/dark_nav_button_bg" android:text="@string/done" android:layout_alignParentRight="true" style="@style/NavbarTextBtn"
+  xmlns:android="http://schemas.android.com/apk/res/android" />

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="refresh_intervals">
+        <item>Fem minutter</item>
+        <item>Ti minutter</item>
+        <item>15 minutter</item>
+        <item>30 minutter</item>
+        <item>Én time</item>
+        <item>To timer</item>
+        <item>Fire timer</item>
+    </string-array>
+</resources>

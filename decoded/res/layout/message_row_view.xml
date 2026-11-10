@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.twitter.android.widget.TweetView android:background="@drawable/list_row_background" style="@style/ListRow.Tweet"
+  xmlns:android="http://schemas.android.com/apk/res/android" />

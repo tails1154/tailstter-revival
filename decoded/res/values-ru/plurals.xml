@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="time_secs">
+        <item quantity="other">%d сек.</item>
+        <item quantity="one">1 сек.</item>
+    </plurals>
+    <plurals name="time_secs_long">
+        <item quantity="other">%d сек. назад</item>
+        <item quantity="one">1 сек. назад</item>
+    </plurals>
+    <plurals name="time_mins">
+        <item quantity="other">%d мин.</item>
+        <item quantity="one">1 мин.</item>
+    </plurals>
+    <plurals name="time_mins_long">
+        <item quantity="other">%d мин. назад</item>
+        <item quantity="one">1 мин. назад</item>
+    </plurals>
+    <plurals name="time_hours">
+        <item quantity="other">%d ч.</item>
+        <item quantity="one">1 ч.</item>
+    </plurals>
+    <plurals name="time_hours_long">
+        <item quantity="other">%d ч. назад</item>
+        <item quantity="one">1 ч. назад</item>
+    </plurals>
+    <plurals name="retweet_count">
+        <item quantity="other">Процитировали %d людей</item>
+        <item quantity="one">Процитировал 1 человек</item>
+    </plurals>
+    <plurals name="people">
+        <item quantity="other">люди</item>
+        <item quantity="one">человек</item>
+    </plurals>
+    <plurals name="found_people">
+        <item quantity="other">Найдено &lt;b>%d людей&lt;/b> из ваших контактов.</item>
+        <item quantity="one">Найден &lt;b>1 человек&lt;/b> из ваших контактов.</item>
+    </plurals>
+</resources>

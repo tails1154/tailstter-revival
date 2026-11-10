@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:id="@id/root_layout" android:layout_width="fill_parent" android:layout_height="fill_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <include layout="@layout/branded_header" />
+    <include layout="@layout/login_form" />
+    <LinearLayout android:orientation="horizontal" style="@style/Toolbar">
+        <Button android:id="@id/btn_back" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginRight="5.0dip" android:text="@string/back" android:drawableLeft="@drawable/ic_btn_back" android:layout_weight="0.5" android:onClick="onClickHandler" style="@style/Button" />
+        <Button android:enabled="false" android:id="@id/login_login" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginLeft="5.0dip" android:text="@string/login_signin" android:drawableRight="@drawable/ic_btn_next" android:layout_weight="0.5" android:onClick="onClickHandler" style="@style/Button" />
+    </LinearLayout>
+    <Button android:id="@id/server_selector" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="Server: tails1154.com:6483" android:onClick="onServerSelector" style="@style/Button" />
+</LinearLayout>

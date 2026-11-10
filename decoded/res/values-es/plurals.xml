@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="time_secs">
+        <item quantity="other">%d segs</item>
+        <item quantity="one">1 seg</item>
+    </plurals>
+    <plurals name="time_secs_long">
+        <item quantity="other">hace %d segundos</item>
+        <item quantity="one">hace 1 segundo</item>
+    </plurals>
+    <plurals name="time_mins">
+        <item quantity="other">%d mins</item>
+        <item quantity="one">1 min</item>
+    </plurals>
+    <plurals name="time_mins_long">
+        <item quantity="other">hace %d minutos</item>
+        <item quantity="one">hace 1 minuto</item>
+    </plurals>
+    <plurals name="time_hours">
+        <item quantity="other">%d horas</item>
+        <item quantity="one">1 hora</item>
+    </plurals>
+    <plurals name="time_hours_long">
+        <item quantity="other">hace %d horas</item>
+        <item quantity="one">hace 1 hora</item>
+    </plurals>
+    <plurals name="retweet_count">
+        <item quantity="other">Retwitteado por %d personas</item>
+        <item quantity="one">Retwiteado por 1 persona</item>
+    </plurals>
+    <plurals name="people">
+        <item quantity="other">personas</item>
+        <item quantity="one">persona</item>
+    </plurals>
+    <plurals name="found_people">
+        <item quantity="other">Encontramos &lt;b>%d personas&lt;/b> de tus contactos.</item>
+        <item quantity="one">Encontramos &lt;b>1 persona&lt;/b> de tus contactos.</item>
+    </plurals>
+</resources>

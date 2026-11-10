@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout android:orientation="vertical" android:layout_width="fill_parent" android:layout_height="fill_parent" style="@style/ListRow"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <TextView android:id="@id/content" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_toLeftOf="@id/attachment" />
+    <TextView android:id="@id/timestamp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_below="@id/content" style="@style/Byline.Small" />
+    <ImageView android:id="@id/attachment" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/ic_draft_attachment" android:layout_alignParentRight="true" android:layout_centerVertical="true" />
+</RelativeLayout>

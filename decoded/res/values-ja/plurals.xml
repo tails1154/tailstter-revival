@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="time_secs">
+        <item quantity="other">%d秒前</item>
+        <item quantity="one">1秒前</item>
+    </plurals>
+    <plurals name="time_secs_long">
+        <item quantity="other">%d秒前</item>
+        <item quantity="one">1秒前</item>
+    </plurals>
+    <plurals name="time_mins">
+        <item quantity="other">%d分前</item>
+        <item quantity="one">1分前</item>
+    </plurals>
+    <plurals name="time_mins_long">
+        <item quantity="other">%d分前</item>
+        <item quantity="one">1分前</item>
+    </plurals>
+    <plurals name="time_hours">
+        <item quantity="other">%d時間前</item>
+        <item quantity="one">1時間前</item>
+    </plurals>
+    <plurals name="time_hours_long">
+        <item quantity="other">%d時間前</item>
+        <item quantity="one">1時間前</item>
+    </plurals>
+    <plurals name="retweet_count">
+        <item quantity="other">%dがリツイート</item>
+        <item quantity="one">1人がリツイート</item>
+    </plurals>
+    <plurals name="people">
+        <item quantity="other">人</item>
+        <item quantity="one">人</item>
+    </plurals>
+    <plurals name="found_people">
+        <item quantity="other">連絡先に&lt;b>%d人&lt;/b>が見つかりました。</item>
+        <item quantity="one">連絡先に&lt;b>1人&lt;/b>が見つかりました。</item>
+    </plurals>
+</resources>

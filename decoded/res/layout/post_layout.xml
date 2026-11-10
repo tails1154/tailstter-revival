@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout android:id="@id/root_layout" android:layout_width="fill_parent" android:layout_height="fill_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <include android:id="@id/navbar" layout="@layout/compose_navbar" />
+    <ListView android:id="@android:id/list" android:layout_width="fill_parent" android:layout_height="fill_parent" android:layout_above="@id/post_button_bar" android:layout_below="@id/navbar" />
+    <LinearLayout android:id="@id/post_button_bar" android:layout_alignParentBottom="true" style="@style/Toolbar">
+        <ImageButton android:layout_gravity="center_vertical" android:id="@id/add_user" android:background="@null" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/toolbar_mention" android:layout_weight="0.2" android:onClick="onClickHandler" />
+        <ImageButton android:layout_gravity="center_vertical" android:id="@id/camera" android:background="@null" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/toolbar_camera" android:layout_weight="0.2" android:onClick="onClickHandler" />
+        <ImageButton android:layout_gravity="center_vertical" android:id="@id/gallery" android:background="@null" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/toolbar_media" android:layout_weight="0.2" android:onClick="onClickHandler" />
+        <ImageButton android:layout_gravity="center_vertical" android:id="@id/location" android:background="@null" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/toolbar_geo_off" android:layout_weight="0.2" android:onClick="onClickHandler" />
+    </LinearLayout>
+</RelativeLayout>

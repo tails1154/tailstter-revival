@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <com.twitter.android.widget.RefreshableListView android:id="@android:id/list" android:layout_weight="1.0" style="@style/List" />
+    <include android:id="@android:id/empty" layout="@layout/empty_layout" />
+    <ViewStub android:id="@id/bottom_button_bar_stub" android:layout="@layout/bottom_button_bar_layout" android:inflatedId="@id/bottom_button_bar" android:layout_width="fill_parent" android:layout_height="wrap_content" />
+</merge>

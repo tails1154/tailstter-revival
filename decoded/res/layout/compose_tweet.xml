@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:layout_width="fill_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <RelativeLayout android:id="@id/reply_tweet" android:visibility="gone" android:layout_width="fill_parent" android:layout_height="wrap_content">
+        <com.twitter.android.widget.TweetView android:id="@id/reply_tweet_content" style="@style/ListRow" />
+        <View android:background="@drawable/list_rule" android:layout_width="fill_parent" android:layout_height="1.0px" android:layout_below="@id/reply_tweet_content" android:layout_alignParentLeft="true" />
+    </RelativeLayout>
+    <MultiAutoCompleteTextView android:textColor="@android:color/black" android:gravity="center|left|top" android:id="@id/edit" android:layout_width="fill_parent" android:layout_height="fill_parent" android:layout_marginLeft="6.0dip" android:layout_marginTop="6.0dip" android:layout_marginRight="6.0dip" android:hint="@string/post_tweet_hint" android:maxLines="5" android:minLines="4" android:completionThreshold="1" android:inputType="textAutoCorrect|textCapSentences|textMultiLine|textShortMessage" android:imeOptions="flagNoEnterAction">
+        <requestFocus />
+    </MultiAutoCompleteTextView>
+    <Button android:layout_gravity="center|top" android:id="@id/drafts" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="9.0dip" android:text="@string/drafts" android:onClick="onClickHandler" style="@style/Button" />
+</LinearLayout>
