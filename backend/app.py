@@ -100,20 +100,24 @@ def mapped_posts(feed): return [map_post(v) for v in feed.get("feed",[])]
 def map_dm_message(message,session,convo_id=""):
     sender=message.get("sender",{})
     sender_did=sender.get("did","")
-    recipient_did=next((m.get("did") for m in message.get("members",[]) if m.get("did")!=sender_did),"")
+    members=message.get("members",[])
+    recipient_did=next((m.get("did") for m in members if m.get("did")!=sender_did),session["did"] if sender_did!=session["did"] else "")
+    recipient=next((m for m in members if m.get("did")==recipient_did),{})
+    sender_handle=sender.get("handle") or next((m.get("handle") for m in members if m.get("did")==sender_did),session["handle"] if sender_did==session["did"] else "")
     return {"id":legacy_id(message.get("id",convo_id)),"id_str":str(legacy_id(message.get("id",convo_id))),
       "text":message.get("text", ""),"created_at":twitter_date(message.get("sentAt")),
-      "sender_id":legacy_id(sender_did),"sender_screen_name":sender.get("handle",session["handle"] if sender_did==session["did"] else ""),
-      "recipient_id":legacy_id(recipient_did),"recipient_screen_name":"","_convo_id":convo_id,"_message_id":message.get("id","")}
+      "sender_id":legacy_id(sender_did),"sender_screen_name":sender_handle,
+      "recipient_id":legacy_id(recipient_did),"recipient_screen_name":recipient.get("handle",""),"_convo_id":convo_id,"_message_id":message.get("id","")}
 
 def list_dm_messages(c,s):
     data=chat_request(c,s,"GET","chat.bsky.convo.listConvos",{"limit":100})
     output=[]
     for convo in data.get("convos",[]):
-        last=convo.get("lastMessage") or {}
-        msg=last.get("message",last)
-        if msg.get("text"):
-            mapped=map_dm_message(msg,s,convo.get("id","")); mapped["members"]=convo.get("members",[]); output.append(mapped)
+        messages=chat_request(c,s,"GET","chat.bsky.convo.getMessages",{"convoId":convo["id"],"limit":100}).get("messages",[])
+        for msg in messages:
+            msg["members"]=convo.get("members",[])
+            if msg.get("text"): output.append(map_dm_message(msg,s,convo.get("id","")))
+    output.sort(key=lambda m:m["created_at"],reverse=True)
     return output
 
 class Handler(BaseHTTPRequestHandler):
@@ -215,7 +219,8 @@ class Handler(BaseHTTPRequestHandler):
             recipient=public("app.bsky.actor.getProfile",{"actor":handle})
             convo=chat_request(c,s,"POST","chat.bsky.convo.getConvoForMembers",body={"members":[recipient["did"]]})
             sent=chat_request(c,s,"POST","chat.bsky.convo.sendMessage",body={"convoId":convo["convo"]["id"],"message":{"text":text}})
-            mapped=map_dm_message(sent.get("message",sent),s,convo["convo"]["id"])
+            message=sent.get("message",sent); message["members"]=convo["convo"].get("members",[{"did":s["did"],"handle":s["handle"]},{"did":recipient["did"],"handle":recipient.get("handle",handle)}])
+            mapped=map_dm_message(message,s,convo["convo"]["id"])
             return 200,mapped,"application/json"
         if path.startswith("/1/direct_messages/destroy/") and self.command in ("POST","DELETE"):
             target=path.rsplit("/",1)[-1]
