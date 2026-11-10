@@ -66,6 +66,10 @@ assert call('/1/statuses/destroy.json','POST',{'status_id':str(created['id'])},a
 assert any(x[1]=='com.atproto.repo.deleteRecord' for x in calls)
 timeline=call('/1/statuses/home_timeline.json',token=auth)
 assert timeline[0]['text']=='A Bluesky post'
+assert call('/1/statuses/friends.json',token=auth)[0]['text']=='A Bluesky post'
+assert call('/1/statuses/retweets_of_me.json',token=auth)==[]
+assert call('/1/direct_messages.json',token=auth)==[]
+assert call('/1/63987262966206026/lists.json',token=auth)==[]
 assert any(x[1]=='com.atproto.server.refreshSession' for x in calls)
 assert call('/1/statuses/user_timeline.json',params={'screen_name':'alice.bsky.social'},token=auth)[0]['text']=='A Bluesky post'
 assert call('/1/search/tweets.json',params={'q':'Bluesky'},token=auth)['statuses'][0]['text']=='A Bluesky post'
