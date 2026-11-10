@@ -84,9 +84,13 @@ def mapped_posts(feed): return [map_post(v) for v in feed.get("feed",[])]
 
 class Handler(BaseHTTPRequestHandler):
     server_version="TailstterBridge/1.0"
+    # Gingerbread's Apache client is happier with an explicit HTTP/1.1 status
+    # line.  Close each small legacy API response cleanly instead of relying
+    # on its HTTP/1.0 default-close behavior.
+    protocol_version="HTTP/1.1"
     def send_payload(self,status,payload,content_type="application/json; charset=utf-8"):
         data=payload if isinstance(payload,bytes) else json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
-        self.send_response(status); self.send_header("Content-Type",content_type); self.send_header("Content-Length",str(len(data))); self.send_header("Cache-Control","no-store"); self.end_headers(); self.wfile.write(data)
+        self.send_response(status); self.send_header("Content-Type",content_type); self.send_header("Content-Length",str(len(data))); self.send_header("Cache-Control","no-store"); self.send_header("Connection","close"); self.end_headers(); self.wfile.write(data); self.close_connection=True
     def body(self):
         size=int(self.headers.get("Content-Length","0"))
         if size>2_000_000: raise BridgeError(413,"Request body too large")
@@ -121,7 +125,9 @@ class Handler(BaseHTTPRequestHandler):
             c.execute("INSERT INTO sessions(token,service,did,handle,access_jwt,refresh_jwt,created_at) VALUES(?,?,?,?,?,?,?)",
               (token,BSKY_SERVICE,session["did"],session["handle"],session["accessJwt"],session["refreshJwt"],int(time.time())))
             response=urlencode({"oauth_token":token,"oauth_token_secret":secret,"user_id":legacy_id(session["did"]),"screen_name":session["handle"]}).encode()
-            return 200,response,"application/x-www-form-urlencoded"
+            # The legacy Android HTTP reader rejects form-urlencoded response
+            # entities before handing the body to its query-string parser.
+            return 200,response,"text/plain; charset=utf-8"
         if path=="/oauth/logout" and self.command=="POST":
             s=get_session(c,self.headers.get("Authorization"))
             # deleteSession is a session-management operation authorized by
@@ -197,7 +203,10 @@ class Handler(BaseHTTPRequestHandler):
         raise BridgeError(404,"Unknown legacy API route")
     def log_message(self,fmt,*args):
         if urlparse(self.path).path=="/oauth/access_token":
-            print("%s - legacy XAuth login (request path redacted)"%self.address_string())
+            # Keep the password-bearing query string out of logs, but retain
+            # the HTTP result so failed legacy-client exchanges are diagnosable.
+            status=args[1] if len(args)>1 else "unknown"
+            print("%s - legacy XAuth login (request path redacted) %s"%(self.address_string(),status))
         else:
             super().log_message(fmt,*args)
 

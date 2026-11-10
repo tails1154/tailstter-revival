@@ -54,8 +54,12 @@ and mocked AT translations for profile, post, timeline, author feed, search,
 and follow. It does not contact Bluesky. HTTP deployment testing and live
 Mocked bridge tests pass for XAuth session creation, refresh, profile, post,
 timeline, author feed, search, and follow mapping. The host reached Bluesky's
-public AppView (HTTP 200). The APK was installed on Android 2.3.7/API 10 and
-launched to its login screen without a Tailstter crash. Sign-in has not yet
-succeeded: the device reached the bridge, while a dummy Bluesky login correctly
-returned 401. Real posting/timeline tests need a valid Bluesky app password and
-were not performed. The XAuth URL is redacted from service logs. A live sign-in through the bridge succeeded; one short test post was created and then deleted successfully. The first logout attempt failed because the bridge used the access token for session deletion; the bridge now sends the refresh token and its mocked test verifies that behavior. A live logout retry has not yet been performed. The throwaway app password should be revoked after testing.
+public AppView (HTTP 200). A live bridge sign-in succeeded and one short test
+post was created and deleted. Device login initially failed because the old
+Android HTTP reader rejects `application/x-www-form-urlencoded` response bodies;
+the bridge now returns the OAuth token body as `text/plain`, which the client
+accepts. The patched APK was rebuilt and installed. The user has not yet
+confirmed the latest device sign-in. The bridge logout now uses the refresh JWT
+and passes mocked coverage; live logout has not been retried. Revoke the
+throwaway app password after testing. The XAuth URL is redacted from service
+logs.

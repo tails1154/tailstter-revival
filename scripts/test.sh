@@ -55,7 +55,7 @@ def call(path,command='GET',params=None,token=None):
         return result[1] if isinstance(result,tuple) else result
     finally: c.close()
 code,raw,ctype=call('/oauth/access_token','POST',{'x_auth_mode':'client_auth','x_auth_username':'@alice.bsky.social','x_auth_password':'app-password'})
-assert code==200 and ctype=='application/x-www-form-urlencoded'
+assert code==200 and ctype.startswith('text/plain')
 oauth=parse_qs(raw.decode()); token=oauth['oauth_token'][0]
 auth='OAuth realm="Tailstter", oauth_token="'+token+'", oauth_signature_method="HMAC-SHA1"'
 profile=call('/1/account/verify_credentials.json',token=auth)
