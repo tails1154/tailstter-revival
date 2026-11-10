@@ -782,7 +782,7 @@
     :cond_8
     new-instance v1, Lorg/apache/http/client/methods/HttpPost;
 
-    const-string v7, "https://scribe.twitter.com/scribe"
+    const-string v7, "TAILSTTER_DEFAULT_API_BASE/scribe"
 
     invoke-direct {v1, v7}, Lorg/apache/http/client/methods/HttpPost;-><init>(Ljava/lang/String;)V
 

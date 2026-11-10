@@ -6898,7 +6898,9 @@
     :goto_0
     new-instance v11, Ljava/lang/StringBuilder;
 
-    const-string v12, "http://search.twitter.com/search.json"
+    invoke-static {}, Lcom/twitter/android/TailstterApi;->search()Ljava/lang/String;
+
+    move-result-object v12
 
     invoke-direct {v11, v12}, Ljava/lang/StringBuilder;-><init>(Ljava/lang/String;)V
 
@@ -11113,7 +11115,7 @@
 
     invoke-virtual {v0, v1}, Landroid/content/Intent;->removeExtra(Ljava/lang/String;)V
 
-    const-string v12, "https://mobile.twitter.com/mobile_client_api"
+    const-string v12, "TAILSTTER_DEFAULT_API_BASE/mobile_client_api"
 
     const/4 v13, 0x1
 
