@@ -13,14 +13,17 @@ feed_item={'post':{'uri':'at://did:plc:alice/app.bsky.feed.post/abc','cid':'cida
 calls=[]
 expired_once=True
 created_post_uri=None
-def fake_at(service,method,endpoint,params=None,body=None,token=None):
+def fake_at(service,method,endpoint,params=None,body=None,token=None,extra_headers=None):
     global expired_once,created_post_uri
-    calls.append((method,endpoint,params,body,token))
+    calls.append((method,endpoint,params,body,token,extra_headers))
     if endpoint.endswith('createSession'):
         assert body=={'identifier':'alice.bsky.social','password':'app-password'}
         return {'did':'did:plc:alice','handle':'alice.bsky.social','accessJwt':'jwt-access','refreshJwt':'jwt-refresh'}
     if endpoint.endswith('refreshSession'): return {'accessJwt':'jwt-renewed','refreshJwt':'jwt-refresh-2'}
     if endpoint.endswith('deleteSession'): return {}
+    if endpoint.endswith('listConvos'): return {'convos':[]}
+    if endpoint.endswith('getConvoForMembers'): return {'convo':{'id':'convo1'}}
+    if endpoint.endswith('sendMessage'): return {'message':{'id':'message1','sender':{'did':'did:plc:alice','handle':'alice.bsky.social'},'text':body['message']['text'],'sentAt':'2025-01-01T00:00:00Z'}}
     if endpoint.endswith('getTimeline'):
         if expired_once:
             expired_once=False
@@ -69,6 +72,9 @@ assert timeline[0]['text']=='A Bluesky post'
 assert call('/1/statuses/friends.json',token=auth)[0]['text']=='A Bluesky post'
 assert call('/1/statuses/retweets_of_me.json',token=auth)==[]
 assert call('/1/direct_messages.json',token=auth)==[]
+assert calls[-1][5]==api.CHAT_HEADERS
+dm=call('/1/direct_messages/new.json','POST',{'screen_name':'alice.bsky.social','text':'hello'},auth)
+assert dm['text']=='hello' and any(x[1]=='chat.bsky.convo.sendMessage' and x[5]==api.CHAT_HEADERS for x in calls)
 assert call('/1/63987262966206026/lists.json',token=auth)==[]
 assert any(x[1]=='com.atproto.server.refreshSession' for x in calls)
 assert call('/1/statuses/user_timeline.json',params={'screen_name':'alice.bsky.social'},token=auth)[0]['text']=='A Bluesky post'

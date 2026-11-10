@@ -17,13 +17,14 @@ def connect():
     c.execute("CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,service TEXT NOT NULL,did TEXT NOT NULL,handle TEXT NOT NULL,access_jwt TEXT NOT NULL,refresh_jwt TEXT NOT NULL,created_at INTEGER NOT NULL)")
     return c
 
-def at_request(service,method,endpoint,params=None,body=None,token=None):
+def at_request(service,method,endpoint,params=None,body=None,token=None,extra_headers=None):
     url=service.rstrip("/")+"/xrpc/"+endpoint
     if params: url+="?"+urlencode(params,doseq=True)
     payload=None if body is None else json.dumps(body,separators=(",",":")).encode()
     headers={"Accept":"application/json"}
     if payload is not None: headers["Content-Type"]="application/json"
     if token: headers["Authorization"]="Bearer "+token
+    if extra_headers: headers.update(extra_headers)
     req=Request(url,data=payload,headers=headers,method=method)
     try:
         with urlopen(req,timeout=20) as r:
@@ -42,14 +43,22 @@ class BridgeError(Exception):
 
 def public(endpoint,params=None): return at_request(BSKY_PUBLIC,"GET",endpoint,params=params)
 
-def session_request(c,s,method,endpoint,params=None,body=None):
-    try: return at_request(s["service"],method,endpoint,params,body,s["access_jwt"])
+def session_request(c,s,method,endpoint,params=None,body=None,extra_headers=None):
+    def call(token):
+        if extra_headers: return at_request(s["service"],method,endpoint,params,body,token,extra_headers)
+        return at_request(s["service"],method,endpoint,params,body,token)
+    try: return call(s["access_jwt"])
     except BridgeError as e:
         if e.status!=401: raise
         renewed=at_request(s["service"],"POST","com.atproto.server.refreshSession",token=s["refresh_jwt"])
         c.execute("UPDATE sessions SET access_jwt=?,refresh_jwt=? WHERE token=?",(renewed["accessJwt"],renewed.get("refreshJwt",s["refresh_jwt"]),s["token"]))
         s=dict(s); s["access_jwt"]=renewed["accessJwt"]; s["refresh_jwt"]=renewed.get("refreshJwt",s["refresh_jwt"])
-        return at_request(s["service"],method,endpoint,params,body,s["access_jwt"])
+        return call(s["access_jwt"])
+
+CHAT_HEADERS={"atproto-proxy":"did:web:api.bsky.chat#bsky_chat"}
+
+def chat_request(c,s,method,endpoint,params=None,body=None):
+    return session_request(c,s,method,endpoint,params,body,CHAT_HEADERS)
 
 def get_session(c,authorization):
     m=re.search(r'(?:^|,\s*)oauth_token="([^\"]+)"',authorization or "")
@@ -87,6 +96,25 @@ def map_post(item):
       "entities":{"hashtags":[],"user_mentions":[],"urls":[]},"_at_uri":uri,"_at_cid":post.get("cid","")}
 
 def mapped_posts(feed): return [map_post(v) for v in feed.get("feed",[])]
+
+def map_dm_message(message,session,convo_id=""):
+    sender=message.get("sender",{})
+    sender_did=sender.get("did","")
+    recipient_did=next((m.get("did") for m in message.get("members",[]) if m.get("did")!=sender_did),"")
+    return {"id":legacy_id(message.get("id",convo_id)),"id_str":str(legacy_id(message.get("id",convo_id))),
+      "text":message.get("text", ""),"created_at":twitter_date(message.get("sentAt")),
+      "sender_id":legacy_id(sender_did),"sender_screen_name":sender.get("handle",session["handle"] if sender_did==session["did"] else ""),
+      "recipient_id":legacy_id(recipient_did),"recipient_screen_name":"","_convo_id":convo_id,"_message_id":message.get("id","")}
+
+def list_dm_messages(c,s):
+    data=chat_request(c,s,"GET","chat.bsky.convo.listConvos",{"limit":100})
+    output=[]
+    for convo in data.get("convos",[]):
+        last=convo.get("lastMessage") or {}
+        msg=last.get("message",last)
+        if msg.get("text"):
+            mapped=map_dm_message(msg,s,convo.get("id","")); mapped["members"]=convo.get("members",[]); output.append(mapped)
+    return output
 
 class Handler(BaseHTTPRequestHandler):
     server_version="TailstterBridge/1.0"
@@ -176,7 +204,30 @@ class Handler(BaseHTTPRequestHandler):
             result=public("app.bsky.feed.searchPosts",{"q":"@"+s["handle"],"limit":min(int((q.get("count") or [50])[0]),100)})
             mentions=[map_post({"post":p}) for p in result.get("posts",[]) if s["handle"].lower() in p.get("record",{}).get("text","").lower()]
             return 200,mentions,"application/json"
-        if (path in ("/1/statuses/retweets_of_me.json","/1/direct_messages.json","/1/direct_messages/sent.json","/1/favorites.json") or re.match(r"^/1/\d+/lists(?:/subscriptions)?\.json$",path)) and self.command=="GET":
+        if path in ("/1/direct_messages.json","/1/direct_messages/sent.json") and self.command=="GET":
+            messages=list_dm_messages(c,s)
+            if path.endswith("sent.json"): messages=[m for m in messages if m["sender_id"]==legacy_id(s["did"])]
+            return 200,messages,"application/json"
+        if path=="/1/direct_messages/new.json" and self.command=="POST":
+            p=self.body(); one=lambda k:(p.get(k) or q.get(k) or [""])[0]
+            handle=one("screen_name"); text=one("text")
+            if not handle or not text: raise BridgeError(400,"screen_name and text are required")
+            recipient=public("app.bsky.actor.getProfile",{"actor":handle})
+            convo=chat_request(c,s,"POST","chat.bsky.convo.getConvoForMembers",body={"members":[recipient["did"]]})
+            sent=chat_request(c,s,"POST","chat.bsky.convo.sendMessage",body={"convoId":convo["convo"]["id"],"message":{"text":text}})
+            mapped=map_dm_message(sent.get("message",sent),s,convo["convo"]["id"])
+            return 200,mapped,"application/json"
+        if path.startswith("/1/direct_messages/destroy/") and self.command in ("POST","DELETE"):
+            target=path.rsplit("/",1)[-1]
+            if target.endswith(".json"): target=target[:-5]
+            for convo in chat_request(c,s,"GET","chat.bsky.convo.listConvos",{"limit":100}).get("convos",[]):
+                msgs=chat_request(c,s,"GET","chat.bsky.convo.getMessages",{"convoId":convo["id"],"limit":100}).get("messages",[])
+                match=next((m for m in msgs if str(legacy_id(m.get("id","")))==target),None)
+                if match:
+                    chat_request(c,s,"POST","chat.bsky.convo.deleteMessageForSelf",body={"convoId":convo["id"],"messageId":match["id"]})
+                    return 200,map_dm_message(match,s,convo["id"]),"application/json"
+            raise BridgeError(404,"Message not found")
+        if (path in ("/1/statuses/retweets_of_me.json","/1/favorites.json") or re.match(r"^/1/\d+/lists(?:/subscriptions)?\.json$",path)) and self.command=="GET":
             return 200,[],"application/json"
         if path in ("/1/account/settings.json","/1/client_applications/configuration.json"):
             return 200,{},"application/json"
