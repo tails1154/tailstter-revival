@@ -12,6 +12,7 @@ DB_PATH=Path(os.environ.get("TAILSTTER_DB","tailstter.sqlite3"))
 BSKY_SERVICE=os.environ.get("TAILSTTER_BSKY_SERVICE","https://bsky.social").rstrip("/")
 BSKY_PUBLIC=os.environ.get("TAILSTTER_BSKY_PUBLIC","https://public.api.bsky.app").rstrip("/")
 BSKY_CHAT=os.environ.get("TAILSTTER_BSKY_CHAT","https://api.bsky.chat").rstrip("/")
+AVATAR_PROXY=os.environ.get("TAILSTTER_AVATAR_PROXY","http://tails1154.com:6483/1/media/avatar")
 
 def connect():
     DB_PATH.parent.mkdir(parents=True,exist_ok=True)
@@ -113,7 +114,7 @@ def map_profile(p):
     return {"id":profile_id,"id_str":str(profile_id),"_at_did":p.get("did",""),"name":p.get("displayName") or p.get("handle",""),
       "screen_name":p.get("handle",""),"description":p.get("description","") or "","followers_count":p.get("followersCount",0),
       "friends_count":p.get("followsCount",0),"statuses_count":p.get("postsCount",0),"created_at":twitter_date(p.get("createdAt","")),
-      "profile_image_url":avatar,"profile_image_url_https":avatar,"url":p.get("website","") or "","location":"",
+      "profile_image_url":(AVATAR_PROXY+"?url="+urlencode({"u":avatar})[2:] if avatar else ""),"profile_image_url_https":(AVATAR_PROXY+"?url="+urlencode({"u":avatar})[2:] if avatar else ""),"url":p.get("website","") or "","location":"",
       "favourites_count":0,"geo_enabled":False,"following":bool(viewer.get("following")),
       "followed_by":bool(viewer.get("followedBy")),"protected":False,"verified":False}
 
@@ -251,6 +252,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self): self.dispatch()
     def do_DELETE(self): self.dispatch()
     def route(self,c,path,q):
+        if path=="/1/media/avatar" and self.command=="GET":
+            target=(q.get("url") or [""])[0]
+            if not target.startswith("https://"): raise BridgeError(400,"Invalid avatar URL")
+            data=urlopen(target,timeout=10).read()
+            return 200,data,"image/jpeg"
         if path=="/health" and self.command=="GET": return 200,{"service":"Tailstter Bluesky bridge","status":"ok","upstream":BSKY_SERVICE},"application/json"
         if path=="/decider/android.json" and self.command=="GET": return 200,{"decider":{}},"application/json"
         if path=="/scribe" and self.command=="POST":
@@ -326,6 +332,14 @@ class Handler(BaseHTTPRequestHandler):
             if not posts:
                 own=session_request(c,s,"GET","app.bsky.feed.getAuthorFeed",{"actor":s["did"],"limit":min(int((q.get("count") or [50])[0]),100)})
                 posts=mapped_posts(own)
+            # The legacy provider incorrectly keys Home rows by the returned
+            # user's numeric id. Keep the visible author fields intact, but
+            # use the signed-in owner id for the grouping key it persists.
+            owner_id=legacy_id(s["did"])
+            for post in posts:
+                user=post.get("user") or {}
+                user["_home_owner_id"]=owner_id
+                user["id"]=owner_id; user["id_str"]=str(owner_id)
             return 200,remember_posts(c,posts),"application/json"
         if path=="/1/statuses/friends.json":
             actor=profile_actor(c,s,(q.get("screen_name") or [None])[0],(q.get("user_id") or [None])[0])
