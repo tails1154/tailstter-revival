@@ -12,13 +12,15 @@ api.DB_PATH=Path(os.environ['TAILSTTER_TEST_DB'])
 feed_item={'post':{'uri':'at://did:plc:alice/app.bsky.feed.post/abc','cid':'cidabc','indexedAt':'2025-01-01T00:00:00Z','record':{'text':'A Bluesky post','createdAt':'2025-01-01T00:00:00Z'},'author':{'did':'did:plc:alice','handle':'alice.bsky.social','displayName':'Alice'}}}
 calls=[]
 expired_once=True
+created_post_uri=None
 def fake_at(service,method,endpoint,params=None,body=None,token=None):
-    global expired_once
-    calls.append((method,endpoint,params,body))
+    global expired_once,created_post_uri
+    calls.append((method,endpoint,params,body,token))
     if endpoint.endswith('createSession'):
         assert body=={'identifier':'alice.bsky.social','password':'app-password'}
         return {'did':'did:plc:alice','handle':'alice.bsky.social','accessJwt':'jwt-access','refreshJwt':'jwt-refresh'}
     if endpoint.endswith('refreshSession'): return {'accessJwt':'jwt-renewed','refreshJwt':'jwt-refresh-2'}
+    if endpoint.endswith('deleteSession'): return {}
     if endpoint.endswith('getTimeline'):
         if expired_once:
             expired_once=False
@@ -27,8 +29,14 @@ def fake_at(service,method,endpoint,params=None,body=None,token=None):
     if endpoint.endswith('getAuthorFeed'): return {'feed':[feed_item]}
     if endpoint.endswith('searchPosts'): return {'posts':[feed_item['post']]}
     if endpoint.endswith('getProfile'): return {'did':'did:plc:alice','handle':'alice.bsky.social','displayName':'Alice','followersCount':2,'followsCount':3,'postsCount':4}
-    if endpoint.endswith('createRecord'): return {'uri':'at://did:plc:alice/'+body['collection']+'/record1','cid':'recordcid'}
-    if endpoint.endswith('listRecords'): return {'records':[]}
+    if endpoint.endswith('createRecord'):
+        uri='at://did:plc:alice/'+body['collection']+'/record1'
+        if body['collection']=='app.bsky.feed.post': created_post_uri=uri
+        return {'uri':uri,'cid':'recordcid'}
+    if endpoint.endswith('listRecords'):
+        if body is None and params.get('collection')=='app.bsky.feed.post' and created_post_uri:
+            return {'records':[{'uri':created_post_uri,'value':{'text':'A new post'}}]}
+        return {'records':[]}
     if endpoint.endswith('deleteRecord'): return {}
     raise AssertionError('unexpected AT call '+endpoint)
 api.at_request=fake_at
@@ -54,6 +62,8 @@ profile=call('/1/account/verify_credentials.json',token=auth)
 assert profile['screen_name']=='alice.bsky.social'
 created=call('/1/statuses/update.json','POST',{'status':'A new post'},auth)
 assert created['text']=='A new post' and calls[-1][1]=='com.atproto.repo.createRecord'
+assert call('/1/statuses/destroy.json','POST',{'status_id':str(created['id'])},auth)['deleted']
+assert any(x[1]=='com.atproto.repo.deleteRecord' for x in calls)
 timeline=call('/1/statuses/home_timeline.json',token=auth)
 assert timeline[0]['text']=='A Bluesky post'
 assert any(x[1]=='com.atproto.server.refreshSession' for x in calls)
@@ -61,5 +71,10 @@ assert call('/1/statuses/user_timeline.json',params={'screen_name':'alice.bsky.s
 assert call('/1/search/tweets.json',params={'q':'Bluesky'},token=auth)['statuses'][0]['text']=='A Bluesky post'
 assert call('/1/users/show.json',params={'screen_name':'alice.bsky.social'},token=auth)['screen_name']=='alice.bsky.social'
 assert call('/1/friendships/create.json','POST',{'screen_name':'alice.bsky.social'},auth)['following']
-print('Tailstter bridge tests passed: XAuth-to-AT session, profile, AT post, timeline, author feed, search, and follow mapping')
+assert call('/oauth/logout','POST',token=auth)['ok']
+assert calls[-1][1]=='com.atproto.server.deleteSession' and calls[-1][4]=='jwt-refresh-2'
+try: call('/1/account/verify_credentials.json',token=auth)
+except api.BridgeError as e: assert e.status==401
+else: raise AssertionError('logged-out AT bridge session remained valid')
+print('Tailstter bridge tests passed: XAuth-to-AT session, refresh, profile, create/delete post, timeline, author feed, search, and follow mapping')
 PY

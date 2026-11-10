@@ -26,7 +26,9 @@ def at_request(service,method,endpoint,params=None,body=None,token=None):
     if token: headers["Authorization"]="Bearer "+token
     req=Request(url,data=payload,headers=headers,method=method)
     try:
-        with urlopen(req,timeout=20) as r: return json.loads(r.read().decode("utf-8"))
+        with urlopen(req,timeout=20) as r:
+            raw=r.read().decode("utf-8")
+            return json.loads(raw) if raw else {}
     except HTTPError as e:
         raw=e.read().decode("utf-8","replace")
         try: detail=json.loads(raw)
@@ -120,6 +122,13 @@ class Handler(BaseHTTPRequestHandler):
               (token,BSKY_SERVICE,session["did"],session["handle"],session["accessJwt"],session["refreshJwt"],int(time.time())))
             response=urlencode({"oauth_token":token,"oauth_token_secret":secret,"user_id":legacy_id(session["did"]),"screen_name":session["handle"]}).encode()
             return 200,response,"application/x-www-form-urlencoded"
+        if path=="/oauth/logout" and self.command=="POST":
+            s=get_session(c,self.headers.get("Authorization"))
+            # deleteSession is a session-management operation authorized by
+            # the refresh JWT, not the access JWT used for ordinary XRPCs.
+            at_request(s["service"],"POST","com.atproto.server.deleteSession",token=s["refresh_jwt"])
+            c.execute("DELETE FROM sessions WHERE token=?",(s["token"],))
+            return 200,{"ok":True},"application/json"
         s=get_session(c,self.headers.get("Authorization"))
         if path=="/1/account/verify_credentials.json":
             p=public("app.bsky.actor.getProfile",{"actor":s["did"]}); return 200,map_profile(p),"application/json"
@@ -132,6 +141,22 @@ class Handler(BaseHTTPRequestHandler):
             created=session_request(c,s,"POST","com.atproto.repo.createRecord",body={"repo":s["did"],"collection":"app.bsky.feed.post","record":record})
             item={"uri":created["uri"],"cid":created.get("cid",""),"author":{"did":s["did"],"handle":s["handle"]},"record":record}
             return 200,map_post(item),"application/json"
+        if path.startswith("/1/statuses/destroy") and self.command in ("POST","DELETE"):
+            match=re.search(r"/destroy/(\d+)(?:\.json)?$",path)
+            target=int(match.group(1)) if match else int((q.get("status_id") or q.get("id") or ["0"])[0])
+            if target<=0: raise BridgeError(400,"status_id is required")
+            cursor=None; found=None; pages=0
+            while pages<100:
+                args={"repo":s["did"],"collection":"app.bsky.feed.post","limit":100}
+                if cursor: args["cursor"]=cursor
+                records=session_request(c,s,"GET","com.atproto.repo.listRecords",args)
+                found=next((v for v in records.get("records",[]) if legacy_id(v.get("uri",""))==target),None)
+                if found or not records.get("cursor"): break
+                cursor=records["cursor"]; pages+=1
+            if not found: raise BridgeError(404,"Post not found or not owned by this account")
+            rkey=found["uri"].rsplit("/",1)[-1]
+            session_request(c,s,"POST","com.atproto.repo.deleteRecord",body={"repo":s["did"],"collection":"app.bsky.feed.post","rkey":rkey})
+            return 200,{"id":target,"id_str":str(target),"deleted":True},"application/json"
         if path=="/1/statuses/home_timeline.json":
             feed=session_request(c,s,"GET","app.bsky.feed.getTimeline",{"limit":min(int((q.get("count") or [50])[0]),100)})
             return 200,mapped_posts(feed),"application/json"

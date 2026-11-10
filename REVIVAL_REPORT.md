@@ -58,5 +58,4 @@ public AppView (HTTP 200). The APK was installed on Android 2.3.7/API 10 and
 launched to its login screen without a Tailstter crash. Sign-in has not yet
 succeeded: the device reached the bridge, while a dummy Bluesky login correctly
 returned 401. Real posting/timeline tests need a valid Bluesky app password and
-were not performed. The bridge returns an actionable error for invalid
-credentials; the XAuth URL is redacted from service logs.
+were not performed. The XAuth URL is redacted from service logs. A live sign-in through the bridge succeeded; one short test post was created and then deleted successfully. The first logout attempt failed because the bridge used the access token for session deletion; the bridge now sends the refresh token and its mocked test verifies that behavior. A live logout retry has not yet been performed. The throwaway app password should be revoked after testing.
