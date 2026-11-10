@@ -1,5 +1,5 @@
 """HTTP bridge from the 2011 Twitter API client to Bluesky's AT Protocol."""
-import hashlib, json, os, re, secrets, sqlite3, time
+import hashlib, json, os, re, secrets, sqlite3, sys, time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 DB_PATH=Path(os.environ.get("TAILSTTER_DB","tailstter.sqlite3"))
 BSKY_SERVICE=os.environ.get("TAILSTTER_BSKY_SERVICE","https://bsky.social").rstrip("/")
 BSKY_PUBLIC=os.environ.get("TAILSTTER_BSKY_PUBLIC","https://public.api.bsky.app").rstrip("/")
+BSKY_CHAT=os.environ.get("TAILSTTER_BSKY_CHAT","https://api.bsky.chat").rstrip("/")
 
 def connect():
     DB_PATH.parent.mkdir(parents=True,exist_ok=True)
@@ -19,9 +20,13 @@ def connect():
     c.execute("CREATE TABLE IF NOT EXISTS legacy_posts(id INTEGER PRIMARY KEY,uri TEXT NOT NULL,cid TEXT NOT NULL,author_did TEXT NOT NULL,post_json TEXT NOT NULL DEFAULT '{}')")
     columns={r[1] for r in c.execute("PRAGMA table_info(legacy_posts)")}
     if "post_json" not in columns: c.execute("ALTER TABLE legacy_posts ADD COLUMN post_json TEXT NOT NULL DEFAULT '{}'")
-    c.execute("CREATE TABLE IF NOT EXISTS saved_searches(id INTEGER PRIMARY KEY AUTOINCREMENT,session_token TEXT NOT NULL,query TEXT NOT NULL)")
+    c.execute("CREATE TABLE IF NOT EXISTS legacy_profiles(id INTEGER PRIMARY KEY,did TEXT NOT NULL,handle TEXT NOT NULL,profile_json TEXT NOT NULL)")
+    c.execute("CREATE TABLE IF NOT EXISTS saved_searches(id INTEGER PRIMARY KEY AUTOINCREMENT,session_token TEXT NOT NULL,query TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT 'Thu Jan 01 00:00:00 +0000 1970')")
+    saved_columns={r[1] for r in c.execute("PRAGMA table_info(saved_searches)")}
+    if "created_at" not in saved_columns: c.execute("ALTER TABLE saved_searches ADD COLUMN created_at TEXT NOT NULL DEFAULT 'Thu Jan 01 00:00:00 +0000 1970'")
     c.execute("CREATE TABLE IF NOT EXISTS legacy_lists(id INTEGER PRIMARY KEY AUTOINCREMENT,session_token TEXT NOT NULL,name TEXT NOT NULL,mode TEXT NOT NULL DEFAULT 'private',description TEXT NOT NULL DEFAULT '')")
     c.execute("CREATE TABLE IF NOT EXISTS legacy_list_members(list_id INTEGER NOT NULL,did TEXT NOT NULL,handle TEXT NOT NULL,PRIMARY KEY(list_id,did))")
+    c.execute("CREATE TABLE IF NOT EXISTS legacy_list_subscribers(list_id INTEGER NOT NULL,did TEXT NOT NULL,handle TEXT NOT NULL,PRIMARY KEY(list_id,did))")
     return c
 
 def at_request(service,method,endpoint,params=None,body=None,token=None,extra_headers=None):
@@ -66,7 +71,14 @@ def session_request(c,s,method,endpoint,params=None,body=None,extra_headers=None
 CHAT_HEADERS={"atproto-proxy":"did:web:api.bsky.chat#bsky_chat"}
 
 def chat_request(c,s,method,endpoint,params=None,body=None):
-    return session_request(c,s,method,endpoint,params,body,CHAT_HEADERS)
+    # Chat XRPC is served by the dedicated Chat service. Bluesky's API
+    # reference documents proxying through the PDS, but bsky.social returns
+    # 501 for these methods on older sessions; the Chat host accepts the same
+    # bearer session directly and avoids that failure mode.
+    saved=s["service"]
+    s["service"]=BSKY_CHAT
+    try: return session_request(c,s,method,endpoint,params,body,CHAT_HEADERS)
+    finally: s["service"]=saved
 
 def get_session(c,authorization):
     m=re.search(r'(?:^|,\s*)oauth_token="([^\"]+)"',authorization or "")
@@ -116,10 +128,35 @@ def map_post(item):
 
 def mapped_posts(feed): return [map_post(v) for v in feed.get("feed",[])]
 
+def remember_profiles(c,profiles):
+    for p in profiles:
+        did=p.get("_at_did")
+        if did and p.get("id"):
+            c.execute("INSERT OR REPLACE INTO legacy_profiles(id,did,handle,profile_json) VALUES(?,?,?,?)",
+              (p["id"],did,p.get("screen_name",""),json.dumps(p,separators=(",",":"))))
+    return profiles
+
+def profile_actor(c,s,handle=None,user_id=None):
+    if handle:
+        return handle.strip().lstrip("@")
+    if user_id not in (None,""):
+        try: ident=int(user_id)
+        except (ValueError,TypeError): return None
+        if ident==legacy_id(s["did"]): return s["did"]
+        row=c.execute("SELECT did FROM legacy_profiles WHERE id=?",(ident,)).fetchone()
+        if row: return row["did"]
+        for row in c.execute("SELECT post_json FROM legacy_posts"):
+            try: user=json.loads(row[0]).get("user",{})
+            except (ValueError,TypeError): continue
+            if user.get("id")==ident and user.get("_at_did"): return user["_at_did"]
+        return None
+    return s["did"]
+
 def remember_posts(c,posts):
     for p in posts:
         uri=p.get("_at_uri")
         if uri: c.execute("INSERT OR REPLACE INTO legacy_posts(id,uri,cid,author_did,post_json) VALUES(?,?,?,?,?)",(p["id"],uri,p.get("_at_cid",""),p.get("user",{}).get("_at_did",""),json.dumps(p,separators=(",",":"))))
+        remember_profiles(c,[p.get("user",{})])
     return posts
 
 def legacy_post_object(row):
@@ -147,9 +184,10 @@ def at_records(c,s,collection):
 
 def legacy_list_object(row,c,s):
     count=c.execute("SELECT count(*) FROM legacy_list_members WHERE list_id=?",(row["id"],)).fetchone()[0]
+    subscriber_count=c.execute("SELECT count(*) FROM legacy_list_subscribers WHERE list_id=?",(row["id"],)).fetchone()[0]
     return {"id":row["id"],"id_str":str(row["id"]),"name":row["name"],"full_name":"@"+s["handle"]+"/"+row["name"],
       "slug":row["name"],"mode":row["mode"],"public":row["mode"]=="public","description":row["description"],
-      "member_count":count,"subscriber_count":0,"user":map_profile({"did":s["did"],"handle":s["handle"]})}
+      "member_count":count,"subscriber_count":subscriber_count,"user":map_profile({"did":s["did"],"handle":s["handle"]})}
 
 def legacy_owner_is_session(owner,s):
     return owner.lstrip("@").lower() in (s["handle"].lower(),str(legacy_id(s["did"])),"me")
@@ -243,6 +281,7 @@ class Handler(BaseHTTPRequestHandler):
         s=get_session(c,self.headers.get("Authorization"))
         if path in ("/1/account/verify_credentials.json","/1/account/verify_credentials.xml"):
             profile=map_profile(public("app.bsky.actor.getProfile",{"actor":s["did"]}))
+            remember_profiles(c,[profile])
             if path.endswith(".xml"):
                 root=ET.Element("user")
                 for key,value in profile.items():
@@ -279,21 +318,38 @@ class Handler(BaseHTTPRequestHandler):
             return 200,deleted,"application/json"
         if path=="/1/statuses/home_timeline.json":
             feed=session_request(c,s,"GET","app.bsky.feed.getTimeline",{"limit":min(int((q.get("count") or [50])[0]),100)})
-            return 200,remember_posts(c,mapped_posts(feed)),"application/json"
+            posts=mapped_posts(feed)
+            # A new Bluesky account may follow nobody, yielding an empty
+            # timeline even though it has its own posts.  Legacy Twitter's
+            # home screen still showed the signed-in account's activity, so
+            # include the author's feed as a useful local replacement.
+            if not posts:
+                own=session_request(c,s,"GET","app.bsky.feed.getAuthorFeed",{"actor":s["did"],"limit":min(int((q.get("count") or [50])[0]),100)})
+                posts=mapped_posts(own)
+            return 200,remember_posts(c,posts),"application/json"
         if path=="/1/statuses/friends.json":
-            params={"actor":(q.get("screen_name") or [s["did"]])[0],"limit":100}
-            if q.get("cursor"): params["cursor"]=q["cursor"][0]
-            follows=public("app.bsky.graph.getFollows",params)
-            users=[map_profile(user) for user in follows.get("follows",[])]
+            actor=profile_actor(c,s,(q.get("screen_name") or [None])[0],(q.get("user_id") or [None])[0])
+            if not actor: raise BridgeError(404,"Profile not found in Tailstter cache")
+            params={"actor":actor,"limit":100}
+            cursor=(q.get("cursor") or [""])[0]
+            if cursor not in ("","0","-1"): params["cursor"]=cursor
+            try: follows=public("app.bsky.graph.getFollows",params)
+            except BridgeError as e:
+                if "cursor" not in params or e.status not in (400,404): raise
+                params.pop("cursor"); follows=public("app.bsky.graph.getFollows",params)
+            users=remember_profiles(c,[map_profile(user) for user in follows.get("follows",[])])
             next_cursor=follows.get("cursor") or "0"
             # The old sync adapter parses an object with a `users` array and
             # a string `next_cursor`; a bare array or a timeline response
             # leaves its user collection null and crashes in SQLite sync.
             return 200,{"users":users,"next_cursor":next_cursor,"next_cursor_str":next_cursor},"application/json"
         if path=="/1/statuses/mentions.json":
-            result=public("app.bsky.feed.searchPosts",{"q":"@"+s["handle"],"limit":min(int((q.get("count") or [50])[0]),100)})
+            try: result=public("app.bsky.feed.searchPosts",{"q":"@"+s["handle"],"limit":min(int((q.get("count") or [50])[0]),100)})
+            except BridgeError as e:
+                if e.status not in (400,403,404): raise
+                return 200,[],"application/json"
             mentions=[map_post({"post":p}) for p in result.get("posts",[]) if s["handle"].lower() in p.get("record",{}).get("text","").lower()]
-            return 200,mentions,"application/json"
+            return 200,remember_posts(c,mentions),"application/json"
         if path in ("/1/statuses/retweeted_by_me.json","/1/statuses/retweeted_to_me.json"):
             feed=public("app.bsky.feed.getAuthorFeed",{"actor":s["did"],"limit":100})
             reposts=[v for v in feed.get("feed",[]) if (v.get("reason") or {}).get("$type","").endswith("#reasonRepost")]
@@ -302,13 +358,14 @@ class Handler(BaseHTTPRequestHandler):
             return 200,{"as_of":datetime.now(timezone.utc).isoformat().replace("+00:00","Z"),"trends":[]},"application/json"
         if path=="/1/promoted_tweets/search.json" and self.command=="GET": return 200,{"promoted_tweets":[]},"application/json"
         if path=="/1/saved_searches.json" and self.command=="GET":
-            rows=c.execute("SELECT id,query FROM saved_searches WHERE session_token=? ORDER BY id DESC",(s["token"],)).fetchall()
-            return 200,[{"id":r[0],"id_str":str(r[0]),"name":r[1],"query":r[1]} for r in rows],"application/json"
+            rows=c.execute("SELECT id,query,created_at FROM saved_searches WHERE session_token=? ORDER BY id DESC",(s["token"],)).fetchall()
+            return 200,[{"id":r[0],"id_str":str(r[0]),"name":r[1],"query":r[1],"created_at":r[2]} for r in rows],"application/json"
         if path=="/1/saved_searches/create.json" and self.command=="POST":
             p=self.body(); query=first_value(p,q,"query")
             if not query: raise BridgeError(400,"query is required")
-            cur=c.execute("INSERT INTO saved_searches(session_token,query) VALUES(?,?)",(s["token"],query))
-            return 200,{"id":cur.lastrowid,"id_str":str(cur.lastrowid),"name":query,"query":query,"created_at":datetime.now(timezone.utc).strftime("%a %b %d %H:%M:%S +0000 %Y")},"application/json"
+            created_at=datetime.now(timezone.utc).strftime("%a %b %d %H:%M:%S +0000 %Y")
+            cur=c.execute("INSERT INTO saved_searches(session_token,query,created_at) VALUES(?,?,?)",(s["token"],query,created_at))
+            return 200,{"id":cur.lastrowid,"id_str":str(cur.lastrowid),"name":query,"query":query,"created_at":created_at},"application/json"
         if path.startswith("/1/saved_searches/destroy/") and self.command in ("POST","DELETE"):
             target=path.rsplit("/",1)[-1]; target=target[:-5] if target.endswith(".json") else target
             c.execute("DELETE FROM saved_searches WHERE id=? AND session_token=?",(int(target),s["token"]))
@@ -351,7 +408,8 @@ class Handler(BaseHTTPRequestHandler):
                     return 200,map_dm_message(match,s,convo["id"]),"application/json"
             raise BridgeError(404,"Message not found")
         if path=="/1/favorites.json" and self.command=="GET":
-            actor=(q.get("screen_name") or [s["handle"]])[0]
+            actor=profile_actor(c,s,(q.get("screen_name") or [None])[0],(q.get("user_id") or [None])[0])
+            if not actor: raise BridgeError(404,"Profile not found in Tailstter cache")
             feed=public("app.bsky.feed.getActorLikes",{"actor":actor,"limit":min(int((q.get("count") or [50])[0]),100)})
             return 200,remember_posts(c,mapped_posts(feed)),"application/json"
         if path=="/1/statuses/retweets_of_me.json" and self.command=="GET":
@@ -402,15 +460,18 @@ class Handler(BaseHTTPRequestHandler):
             session_request(c,s,"POST","com.atproto.repo.putRecord",body={"repo":s["did"],"collection":"app.bsky.actor.profile","rkey":"self","record":record})
             return 200,map_profile(public("app.bsky.actor.getProfile",{"actor":s["did"]})),"application/json"
         if path in ("/1/account/settings.json","/1/client_applications/configuration.json"):
-            return 200,{"protected":False,"screen_name":s["handle"],"language":"en","time_zone":"UTC","geo_enabled":False,"short_url_length":23},"application/json"
+            return 200,{"protected":False,"screen_name":s["handle"],"language":"en","time_zone":"UTC","geo_enabled":False,"short_url_length":23,"scribe_interval":0,"scribe_enabled":False},"application/json"
         if path=="/1/statuses/user_timeline.json":
-            actor=(q.get("screen_name") or [s["handle"]])[0]
+            actor=profile_actor(c,s,(q.get("screen_name") or [None])[0],(q.get("user_id") or [None])[0])
+            if not actor: raise BridgeError(404,"Profile not found in Tailstter cache")
             feed=public("app.bsky.feed.getAuthorFeed",{"actor":actor,"limit":min(int((q.get("count") or [50])[0]),100)})
-            return 200,mapped_posts(feed),"application/json"
+            return 200,remember_posts(c,mapped_posts(feed)),"application/json"
         if path=="/1/search/tweets.json":
             term=(q.get("q") or [""])[0]
             if not term: raise BridgeError(400,"Search query is required")
-            result=public("app.bsky.feed.searchPosts",{"q":term,"limit":min(int((q.get("count") or q.get("rpp") or [25])[0]),100)})
+            # Search is authenticated on some PDS deployments; use the
+            # signed-in session rather than an unauthenticated public call.
+            result=session_request(c,s,"GET","app.bsky.feed.searchPosts",{"q":term,"limit":min(int((q.get("count") or q.get("rpp") or [25])[0]),100)})
             posts=[map_post({"post":p}) for p in result.get("posts",[])]
             # Twitter's retired search endpoint returns a distinct result
             # schema (`from_user`, root `profile_image_url`, and `metadata`),
@@ -421,44 +482,58 @@ class Handler(BaseHTTPRequestHandler):
                 user=post.get("user",{})
                 search_results.append({"created_at":post["created_at"],"source":"","text":post["text"],
                   "profile_image_url":user.get("profile_image_url",""),"to_user":"","from_user":user.get("screen_name",""),
-                  "from_user_id":user.get("id",0),"id":post["id"],"metadata":{"result_type":"recent","recent_retweets":0}})
+                  "from_user_id":user.get("id",0),"id":post["id"],"metadata":{"result_type":"recent","popular":False,"recent_retweets":0}})
+            remember_posts(c,posts)
             return 200,{"statuses":posts,"results":search_results,"search_metadata":{"query":term,"count":len(posts)},"results_per_page":len(posts)},"application/json"
         if path=="/1/users/show.json":
-            actor=(q.get("screen_name") or [""])[0]
-            if not actor: raise BridgeError(400,"screen_name is required")
-            return 200,map_profile(public("app.bsky.actor.getProfile",{"actor":actor})),"application/json"
+            actor=profile_actor(c,s,(q.get("screen_name") or [None])[0],(q.get("user_id") or [None])[0])
+            if not actor: raise BridgeError(404,"Profile not found in Tailstter cache")
+            profile=map_profile(public("app.bsky.actor.getProfile",{"actor":actor}))
+            return 200,remember_profiles(c,[profile])[0],"application/json"
         if path=="/1/users/lookup.json":
-            actors=(q.get("screen_name") or q.get("user_id") or [""])[0].split(",")
+            handles=(q.get("screen_name") or [None])[0]
+            ids=(q.get("user_id") or [None])[0]
+            actors=(handles or ids or "").split(",")
             profiles=[]
             for actor in actors[:25]:
                 if actor.strip():
-                    try: profiles.append(map_profile(public("app.bsky.actor.getProfile",{"actor":actor.strip()})))
+                    resolved=profile_actor(c,s,actor.strip(),actor.strip() if actor.strip().isdigit() else None)
+                    if not resolved: continue
+                    try: profiles.append(map_profile(public("app.bsky.actor.getProfile",{"actor":resolved})))
                     except BridgeError as e:
                         if e.status not in (400,404): raise
-            return 200,profiles,"application/json"
+            return 200,remember_profiles(c,profiles),"application/json"
         if path=="/1/users/search.json":
             term=(q.get("q") or [""])[0]
             result=public("app.bsky.actor.searchActors",{"q":term,"limit":min(int((q.get("count") or [20])[0]),100)}) if term else {"actors":[]}
-            return 200,[map_profile(p) for p in result.get("actors",[])],"application/json"
+            return 200,remember_profiles(c,[map_profile(p) for p in result.get("actors",[])]),"application/json"
         if path=="/1/users/suggestions.json": return 200,[],"application/json"
         if re.fullmatch(r"/1/users/suggestions/[^/]+\.json",path):
             sug=session_request(c,s,"GET","app.bsky.actor.getSuggestions",{"limit":20})
-            users=[map_profile(p) for p in sug.get("actors",[])]
+            users=remember_profiles(c,[map_profile(p) for p in sug.get("actors",[])])
             return 200,{"users":users,"next_cursor":"0","next_cursor_str":"0"},"application/json"
         if path=="/1/statuses/followers.json":
-            actor=(q.get("screen_name") or [s["did"]])[0]
+            actor=profile_actor(c,s,(q.get("screen_name") or [None])[0],(q.get("user_id") or [None])[0])
+            if not actor: raise BridgeError(404,"Profile not found in Tailstter cache")
             params={"actor":actor,"limit":min(int((q.get("count") or [50])[0]),100)}
-            if q.get("cursor"): params["cursor"]=q["cursor"][0]
-            result=public("app.bsky.graph.getFollowers",params)
-            users=[map_profile(p) for p in result.get("followers",[])]
+            cursor=(q.get("cursor") or [""])[0]
+            if cursor not in ("","0","-1"): params["cursor"]=cursor
+            try: result=public("app.bsky.graph.getFollowers",params)
+            except BridgeError as e:
+                if "cursor" not in params or e.status not in (400,404): raise
+                params.pop("cursor"); result=public("app.bsky.graph.getFollowers",params)
+            users=remember_profiles(c,[map_profile(p) for p in result.get("followers",[])])
             cursor=result.get("cursor") or "0"
             return 200,{"users":users,"next_cursor":cursor,"next_cursor_str":cursor},"application/json"
         if path=="/1/friendships/show.json":
-            other=(q.get("target_screen_name") or q.get("screen_name") or [""])[0]
-            if not other: raise BridgeError(400,"screen_name is required")
-            did=public("app.bsky.actor.getProfile",{"actor":other})["did"]
+            other=(q.get("target_screen_name") or q.get("screen_name") or [None])[0]
+            other_id=(q.get("target_id") or q.get("user_id") or [None])[0]
+            did=profile_actor(c,s,other,other_id)
+            if not did: raise BridgeError(404,"Profile not found in Tailstter cache")
+            target_profile=public("app.bsky.actor.getProfile",{"actor":did})
             rel=public("app.bsky.graph.getRelationships",{"actor":s["did"],"others":[did]}).get("relationships",[{}])[0]
-            return 200,{"relationship":{"source":{"following":bool(rel.get("following")),"followed_by":bool(rel.get("followedBy"))},"target":{"id_str":str(legacy_id(did)),"screen_name":other}}},"application/json"
+            target=remember_profiles(c,[map_profile(target_profile)])[0]
+            return 200,{"relationship":{"source":{"following":bool(rel.get("following")),"followed_by":bool(rel.get("followedBy"))},"target":{"id_str":str(target["id"]),"screen_name":target["screen_name"]}}},"application/json"
         if path=="/1/friendships/create_all.json" and self.command=="POST":
             p=self.body(); handles=(first_value(p,q,"screen_name") or first_value(p,q,"user_id")).split(",")
             result=[]
@@ -523,6 +598,7 @@ class Handler(BaseHTTPRequestHandler):
         if path=="/1/lists/destroy.json" and self.command in ("POST","DELETE"):
             p=self.body(); ident=first_value(p,q,"list_id") or first_value(p,q,"id")
             c.execute("DELETE FROM legacy_list_members WHERE list_id IN (SELECT id FROM legacy_lists WHERE id=? AND session_token=?)",(ident,s["token"]))
+            c.execute("DELETE FROM legacy_list_subscribers WHERE list_id IN (SELECT id FROM legacy_lists WHERE id=? AND session_token=?)",(ident,s["token"]))
             c.execute("DELETE FROM legacy_lists WHERE id=? AND session_token=?",(ident,s["token"]))
             return 200,{"destroyed":True},"application/json"
         if path=="/1/lists/statuses.json" and self.command=="GET":
@@ -555,7 +631,17 @@ class Handler(BaseHTTPRequestHandler):
                     posts.extend(mapped_posts(feed).copy())
                 posts.sort(key=lambda x:x.get("created_at",""),reverse=True)
                 return 200,remember_posts(c,posts[:100]),"application/json"
-            if sub=="subscribers": return 200,legacy_list_object(row,c,s),"application/json"
+            if sub=="subscribers":
+                if self.command=="GET":
+                    users=[map_profile({"did":m[0],"handle":m[1]}) for m in c.execute("SELECT did,handle FROM legacy_list_subscribers WHERE list_id=?",(ident,))]
+                    return 200,{"users":users,"next_cursor":"0","next_cursor_str":"0"},"application/json"
+                p=self.body(); handle=first_value(p,q,"screen_name")
+                if not handle: raise BridgeError(400,"screen_name is required")
+                actor=public("app.bsky.actor.getProfile",{"actor":handle})
+                if self.command=="POST": c.execute("INSERT OR REPLACE INTO legacy_list_subscribers(list_id,did,handle) VALUES(?,?,?)",(ident,actor["did"],actor["handle"]))
+                else: c.execute("DELETE FROM legacy_list_subscribers WHERE list_id=? AND did=?",(ident,actor["did"]))
+                refreshed=c.execute("SELECT * FROM legacy_lists WHERE id=?",(ident,)).fetchone()
+                return 200,legacy_list_object(refreshed,c,s),"application/json"
             return 200,legacy_list_object(row,c,s),"application/json"
         if path in ("/1/friendships/create.json","/1/friendships/destroy.json") and self.command in ("POST","DELETE"):
             p=self.body(); handle=first_value(p,q,"screen_name")
@@ -600,13 +686,25 @@ class Handler(BaseHTTPRequestHandler):
             return 200,map_profile(public("app.bsky.actor.getProfile",{"actor":did})),"application/json"
         raise BridgeError(404,"Unknown legacy API route")
     def log_message(self,fmt,*args):
-        if urlparse(self.path).path=="/oauth/access_token":
-            # Keep the password-bearing query string out of logs, but retain
-            # the HTTP result so failed legacy-client exchanges are diagnosable.
-            status=args[1] if len(args)>1 else "unknown"
-            print("%s - legacy XAuth login (request path redacted) %s"%(self.address_string(),status))
+        # Log only method, a redacted route, status, and byte count. Query
+        # strings can contain XAuth passwords and search text; request bodies
+        # can contain post or DM content.
+        request=args[0] if args and isinstance(args[0],str) else ""
+        parts=request.split()
+        if len(parts)>=2 and parts[0] in ("GET","POST","DELETE","PUT","HEAD"):
+            path=urlparse(parts[1]).path
+            path=re.sub(r"^/1/[^/]+/lists(?:/[^/]+)?\.json$","/1/{owner}/lists[/{slug}].json",path)
+            path=re.sub(r"^/1/[^/]+/\d+/(members|subscribers|statuses)\.json$",r"/1/{owner}/{id}/\1.json",path)
+            path=re.sub(r"^/1/[^/]+/\d+\.json$","/1/{owner}/{id}.json",path)
+            path=re.sub(r"^/1/users/suggestions/[^/]+\.json$","/1/users/suggestions/{slug}.json",path)
+            path=re.sub(r"^/1/statuses/(show|destroy|retweet)/\d+\.json$",r"/1/statuses/\1/{id}.json",path)
+            path=re.sub(r"^/1/favorites/(create|destroy)/\d+\.json$",r"/1/favorites/\1/{id}.json",path)
+            path=re.sub(r"^/1/lists/\d+(?:/(members|subscribers|statuses))?\.json$","/1/lists/{id}[/{resource}].json",path)
+            code=args[1] if len(args)>1 else "?"
+            size=args[2] if len(args)>2 else "?"
+            print("TailstterBridge request method=%s path=%s status=%s bytes=%s"%(parts[0],path,code,size),file=sys.stderr,flush=True)
         else:
-            super().log_message(fmt,*args)
+            print("TailstterBridge malformed HTTP request",file=sys.stderr,flush=True)
 
 
 if __name__=="__main__":
