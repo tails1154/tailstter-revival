@@ -59,9 +59,9 @@ assert code==200 and ctype.startswith('text/plain')
 oauth=parse_qs(raw.decode()); token=oauth['oauth_token'][0]
 auth='OAuth realm="Tailstter", oauth_token="'+token+'", oauth_signature_method="HMAC-SHA1"'
 profile=call('/1/account/verify_credentials.json',token=auth)
-assert profile['screen_name']=='alice.bsky.social'
+assert profile['screen_name']=='alice.bsky.social' and profile['id_str']==str(profile['id'])
 created=call('/1/statuses/update.json','POST',{'status':'A new post'},auth)
-assert created['text']=='A new post' and calls[-1][1]=='com.atproto.repo.createRecord'
+assert created['text']=='A new post' and created['id_str']==str(created['id']) and calls[-1][1]=='com.atproto.repo.createRecord'
 assert call('/1/statuses/destroy.json','POST',{'status_id':str(created['id'])},auth)['deleted']
 assert any(x[1]=='com.atproto.repo.deleteRecord' for x in calls)
 timeline=call('/1/statuses/home_timeline.json',token=auth)

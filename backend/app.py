@@ -68,7 +68,8 @@ def twitter_date(value):
     except Exception: return value or ""
 
 def map_profile(p):
-    return {"id":legacy_id(p.get("did",p.get("handle",""))),"id_str":p.get("did",""),"name":p.get("displayName") or p.get("handle",""),
+    profile_id=legacy_id(p.get("did",p.get("handle","")))
+    return {"id":profile_id,"id_str":str(profile_id),"_at_did":p.get("did",""),"name":p.get("displayName") or p.get("handle",""),
       "screen_name":p.get("handle",""),"description":p.get("description","") or "","followers_count":p.get("followersCount",0),
       "friends_count":p.get("followsCount",0),"statuses_count":p.get("postsCount",0),"created_at":twitter_date(p.get("createdAt","")),
       "profile_image_url_https":p.get("avatar",""),"protected":False,"verified":False}
@@ -76,7 +77,8 @@ def map_profile(p):
 def map_post(item):
     post=item.get("post",item); record=post.get("record",{}); author=post.get("author",{})
     uri=post.get("uri",""); text=record.get("text",post.get("text",""))
-    return {"id":legacy_id(uri or text),"id_str":uri,"text":text,"full_text":text,"created_at":twitter_date(record.get("createdAt",post.get("indexedAt",""))),
+    post_id=legacy_id(uri or text)
+    return {"id":post_id,"id_str":str(post_id),"text":text,"full_text":text,"created_at":twitter_date(record.get("createdAt",post.get("indexedAt",""))),
       "user":map_profile(author),"favorited":False,"retweeted":False,"favorite_count":post.get("likeCount",0),"retweet_count":post.get("repostCount",0),
       "entities":{"hashtags":[],"user_mentions":[],"urls":[]},"_at_uri":uri,"_at_cid":post.get("cid","")}
 
