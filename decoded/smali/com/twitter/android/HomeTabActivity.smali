@@ -251,6 +251,15 @@
     return-void
 
     :cond_0
+    # Load Home directly through TwitterService instead of Android SyncManager.
+    new-instance v6, Landroid/os/Bundle;
+    invoke-direct {v6}, Landroid/os/Bundle;-><init>()V
+    const-string v1, "home"
+    const/4 v2, 0x1
+    invoke-virtual {v6, v1, v2}, Landroid/os/Bundle;->putBoolean(Ljava/lang/String;Z)V
+    const/4 v2, 0x1
+    invoke-static {p0, v6, v2}, Lcom/twitter/android/platform/TwitterDataSyncService;->a(Landroid/content/Context;Landroid/os/Bundle;Z)V
+
     invoke-virtual {p0, v5}, Lcom/twitter/android/HomeTabActivity;->getPreferences(I)Landroid/content/SharedPreferences;
 
     move-result-object v0
