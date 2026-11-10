@@ -11895,7 +11895,8 @@
     goto/16 :goto_2
 
     :pswitch_3a
-    const-string v5, "https://mobile.twitter.com/mobile_client_api"
+    invoke-static {}, Lcom/twitter/android/TailstterApi;->root()Ljava/lang/String;
+    move-result-object v5
 
     const/4 v6, 0x2
 

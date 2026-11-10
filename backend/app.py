@@ -15,6 +15,10 @@ def connect():
     DB_PATH.parent.mkdir(parents=True,exist_ok=True)
     c=sqlite3.connect(str(DB_PATH),timeout=15); c.row_factory=sqlite3.Row
     c.execute("CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,service TEXT NOT NULL,did TEXT NOT NULL,handle TEXT NOT NULL,access_jwt TEXT NOT NULL,refresh_jwt TEXT NOT NULL,created_at INTEGER NOT NULL)")
+    c.execute("CREATE TABLE IF NOT EXISTS legacy_posts(id INTEGER PRIMARY KEY,uri TEXT NOT NULL,cid TEXT NOT NULL,author_did TEXT NOT NULL)")
+    c.execute("CREATE TABLE IF NOT EXISTS saved_searches(id INTEGER PRIMARY KEY AUTOINCREMENT,session_token TEXT NOT NULL,query TEXT NOT NULL)")
+    c.execute("CREATE TABLE IF NOT EXISTS legacy_lists(id INTEGER PRIMARY KEY AUTOINCREMENT,session_token TEXT NOT NULL,name TEXT NOT NULL,mode TEXT NOT NULL DEFAULT 'private',description TEXT NOT NULL DEFAULT '')")
+    c.execute("CREATE TABLE IF NOT EXISTS legacy_list_members(list_id INTEGER NOT NULL,did TEXT NOT NULL,handle TEXT NOT NULL,PRIMARY KEY(list_id,did))")
     return c
 
 def at_request(service,method,endpoint,params=None,body=None,token=None,extra_headers=None):
@@ -70,6 +74,12 @@ def get_session(c,authorization):
 
 def legacy_id(uri): return int.from_bytes(hashlib.sha256(uri.encode()).digest()[:7],"big")
 
+def first_value(body,query,key,default=""):
+    value=(body or {}).get(key)
+    if value in (None,""): value=(query or {}).get(key)
+    if isinstance(value,(list,tuple)): return value[0] if value else default
+    return value if value is not None else default
+
 def twitter_date(value):
     # The legacy client parses every created_at unconditionally.  Some AT
     # records (notably profiles) have no timestamp, so always return a valid
@@ -96,6 +106,31 @@ def map_post(item):
       "entities":{"hashtags":[],"user_mentions":[],"urls":[]},"_at_uri":uri,"_at_cid":post.get("cid","")}
 
 def mapped_posts(feed): return [map_post(v) for v in feed.get("feed",[])]
+
+def remember_posts(c,posts):
+    for p in posts:
+        uri=p.get("_at_uri")
+        if uri: c.execute("INSERT OR REPLACE INTO legacy_posts(id,uri,cid,author_did) VALUES(?,?,?,?)",(p["id"],uri,p.get("_at_cid",""),p.get("user",{}).get("_at_did","")))
+    return posts
+
+def resolve_post(c,target):
+    try: n=int(target)
+    except (ValueError,TypeError): n=legacy_id(str(target))
+    return c.execute("SELECT * FROM legacy_posts WHERE id=?",(n,)).fetchone()
+
+def at_records(c,s,collection):
+    cursor=None; out=[]
+    for _ in range(20):
+        args={"repo":s["did"],"collection":collection,"limit":100}
+        if cursor: args["cursor"]=cursor
+        page=session_request(c,s,"GET","com.atproto.repo.listRecords",args)
+        out.extend(page.get("records",[])); cursor=page.get("cursor")
+        if not cursor: break
+    return out
+
+def legacy_list_object(row,c,s):
+    count=c.execute("SELECT count(*) FROM legacy_list_members WHERE list_id=?",(row["id"],)).fetchone()[0]
+    return {"id":row["id"],"id_str":str(row["id"]),"name":row["name"],"mode":row["mode"],"description":row["description"],"member_count":count,"subscriber_count":0,"user":map_profile({"did":s["did"],"handle":s["handle"]})}
 
 def map_dm_message(message,session,convo_id=""):
     sender=message.get("sender",{})
@@ -153,8 +188,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self): self.dispatch()
     def route(self,c,path,q):
         if path=="/health" and self.command=="GET": return 200,{"service":"Tailstter Bluesky bridge","status":"ok","upstream":BSKY_SERVICE},"application/json"
+        if path=="/decider/android.json" and self.command=="GET": return 200,{"decider":{}},"application/json"
         if path=="/oauth/access_token" and self.command=="POST":
-            p=self.body(); one=lambda k:(p.get(k) or q.get(k) or [""])[0]
+            p=self.body(); one=lambda k:first_value(p,q,k)
             if one("x_auth_mode")!="client_auth": raise BridgeError(400,"Unsupported legacy login flow")
             identifier,password=one("x_auth_username").strip().lstrip("@"),one("x_auth_password")
             if not identifier or not password: raise BridgeError(400,"Enter a Bluesky handle and app password")
@@ -203,17 +239,40 @@ class Handler(BaseHTTPRequestHandler):
             return 200,{"id":target,"id_str":str(target),"deleted":True},"application/json"
         if path in ("/1/statuses/home_timeline.json","/1/statuses/friends.json"):
             feed=session_request(c,s,"GET","app.bsky.feed.getTimeline",{"limit":min(int((q.get("count") or [50])[0]),100)})
-            return 200,mapped_posts(feed),"application/json"
+            return 200,remember_posts(c,mapped_posts(feed)),"application/json"
         if path=="/1/statuses/mentions.json":
             result=public("app.bsky.feed.searchPosts",{"q":"@"+s["handle"],"limit":min(int((q.get("count") or [50])[0]),100)})
             mentions=[map_post({"post":p}) for p in result.get("posts",[]) if s["handle"].lower() in p.get("record",{}).get("text","").lower()]
             return 200,mentions,"application/json"
+        if path in ("/1/statuses/retweeted_by_me.json","/1/statuses/retweeted_to_me.json"):
+            feed=public("app.bsky.feed.getAuthorFeed",{"actor":s["did"],"limit":100})
+            reposts=[v for v in feed.get("feed",[]) if (v.get("reason") or {}).get("$type","").endswith("#reasonRepost")]
+            return 200,remember_posts(c,mapped_posts({"feed":reposts})),"application/json"
+        if path.startswith("/1/trends/") and self.command=="GET": return 200,[],"application/json"
+        if path=="/1/saved_searches.json" and self.command=="GET":
+            rows=c.execute("SELECT id,query FROM saved_searches WHERE session_token=? ORDER BY id DESC",(s["token"],)).fetchall()
+            return 200,[{"id":r[0],"id_str":str(r[0]),"name":r[1],"query":r[1]} for r in rows],"application/json"
+        if path=="/1/saved_searches/create.json" and self.command=="POST":
+            p=self.body(); query=first_value(p,q,"query")
+            if not query: raise BridgeError(400,"query is required")
+            cur=c.execute("INSERT INTO saved_searches(session_token,query) VALUES(?,?)",(s["token"],query))
+            return 200,{"id":cur.lastrowid,"id_str":str(cur.lastrowid),"name":query,"query":query},"application/json"
+        if path.startswith("/1/saved_searches/destroy/") and self.command in ("POST","DELETE"):
+            target=path.rsplit("/",1)[-1]; target=target[:-5] if target.endswith(".json") else target
+            c.execute("DELETE FROM saved_searches WHERE id=? AND session_token=?",(int(target),s["token"]))
+            return 200,{"id":int(target),"destroyed":True},"application/json"
+        if path=="/1/urls/shorten.json" and self.command=="GET":
+            url=(q.get("url") or [""])[0]
+            return 200,{"url":url,"short_url":url,"short_url_https":url},"application/json"
+        if path=="/1/promoted_content/log.json" and self.command=="POST": return 200,{},"application/json"
+        if path.startswith("/1/geo/") and self.command=="GET": return 200,{"result":{"places":[]}},"application/json"
+        if path in ("/1/report_spam.json","/1/users/report_spam.json") and self.command=="POST": return 200,{"reported":True},"application/json"
         if path in ("/1/direct_messages.json","/1/direct_messages/sent.json") and self.command=="GET":
             messages=list_dm_messages(c,s)
             if path.endswith("sent.json"): messages=[m for m in messages if m["sender_id"]==legacy_id(s["did"])]
             return 200,messages,"application/json"
         if path=="/1/direct_messages/new.json" and self.command=="POST":
-            p=self.body(); one=lambda k:(p.get(k) or q.get(k) or [""])[0]
+            p=self.body(); one=lambda k:first_value(p,q,k)
             handle=one("screen_name"); text=one("text")
             if not handle or not text: raise BridgeError(400,"screen_name and text are required")
             recipient=public("app.bsky.actor.getProfile",{"actor":handle})
@@ -232,10 +291,49 @@ class Handler(BaseHTTPRequestHandler):
                     chat_request(c,s,"POST","chat.bsky.convo.deleteMessageForSelf",body={"convoId":convo["id"],"messageId":match["id"]})
                     return 200,map_dm_message(match,s,convo["id"]),"application/json"
             raise BridgeError(404,"Message not found")
-        if (path in ("/1/statuses/retweets_of_me.json","/1/favorites.json") or re.match(r"^/1/\d+/lists(?:/subscriptions)?\.json$",path)) and self.command=="GET":
+        if path=="/1/favorites.json" and self.command=="GET":
+            actor=(q.get("screen_name") or [s["handle"]])[0]
+            feed=public("app.bsky.feed.getActorLikes",{"actor":actor,"limit":min(int((q.get("count") or [50])[0]),100)})
+            return 200,remember_posts(c,mapped_posts(feed)),"application/json"
+        if (path=="/1/statuses/retweets_of_me.json" or re.match(r"^/1/\d+/lists(?:/subscriptions)?\.json$",path)) and self.command=="GET":
             return 200,[],"application/json"
+        if (path=="/1/statuses/show.json" or re.match(r"^/1/statuses/show/\d+\.json$",path)) and self.command=="GET":
+            target=path.rsplit("/",1)[-1][:-5] if path.endswith(".json") and path!="/1/statuses/show.json" else (q.get("id") or [""])[0]
+            row=resolve_post(c,target)
+            if not row: raise BridgeError(404,"Post not found")
+            thread=public("app.bsky.feed.getPostThread",{"uri":row["uri"]}).get("thread",{}).get("post")
+            if not thread: raise BridgeError(404,"Post not found")
+            return 200,remember_posts(c,[map_post({"post":thread})])[0],"application/json"
+        if path.startswith("/1/statuses/retweet/") and self.command=="POST":
+            target=path.rsplit("/",1)[-1]; target=target[:-5] if target.endswith(".json") else target; row=resolve_post(c,target)
+            if not row: raise BridgeError(404,"Post not found; load the timeline first")
+            record={"$type":"app.bsky.feed.repost","subject":{"uri":row["uri"],"cid":row["cid"]},"createdAt":datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00","Z")}
+            session_request(c,s,"POST","com.atproto.repo.createRecord",body={"repo":s["did"],"collection":"app.bsky.feed.repost","record":record})
+            thread=public("app.bsky.feed.getPostThread",{"uri":row["uri"]}).get("thread",{}).get("post",{})
+            return 200,map_post({"post":thread}),"application/json"
+        if path in ("/1/favorites/create.json","/1/favorites/destroy.json") and self.command in ("POST","DELETE"):
+            p=self.body(); target=(p.get("id") or p.get("status_id") or q.get("id") or q.get("status_id") or [""])[0]
+            row=resolve_post(c,target)
+            if not row: raise BridgeError(404,"Post not found; load the timeline first")
+            existing=next((r for r in at_records(c,s,"app.bsky.feed.like") if r.get("value",{}).get("subject",{}).get("uri")==row["uri"]),None)
+            if path.endswith("create.json") and not existing:
+                record={"$type":"app.bsky.feed.like","subject":{"uri":row["uri"],"cid":row["cid"]},"createdAt":datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00","Z")}
+                session_request(c,s,"POST","com.atproto.repo.createRecord",body={"repo":s["did"],"collection":"app.bsky.feed.like","record":record})
+            elif path.endswith("destroy.json") and existing:
+                session_request(c,s,"POST","com.atproto.repo.deleteRecord",body={"repo":s["did"],"collection":"app.bsky.feed.like","rkey":existing["uri"].rsplit("/",1)[-1]})
+            return 200,{"id":int(target),"id_str":str(target),"favorited":path.endswith("create.json")},"application/json"
+        if path=="/1/account/rate_limit_status.json":
+            return 200,{"resources":{},"remaining_hits":1000,"hourly_limit":1000},"application/json"
+        if path=="/1/account/update_profile.json" and self.command=="POST":
+            p=self.body(); old=session_request(c,s,"GET","com.atproto.repo.getRecord",{"repo":s["did"],"collection":"app.bsky.actor.profile","rkey":"self"})
+            record=old.get("value",{"$type":"app.bsky.actor.profile"})
+            display=first_value(p,q,"name"); bio=first_value(p,q,"description")
+            if display: record["displayName"]=display
+            if bio: record["description"]=bio
+            session_request(c,s,"POST","com.atproto.repo.putRecord",body={"repo":s["did"],"collection":"app.bsky.actor.profile","rkey":"self","record":record})
+            return 200,map_profile(public("app.bsky.actor.getProfile",{"actor":s["did"]})),"application/json"
         if path in ("/1/account/settings.json","/1/client_applications/configuration.json"):
-            return 200,{},"application/json"
+            return 200,{"protected":False,"screen_name":s["handle"],"language":"en","time_zone":"UTC","geo_enabled":False},"application/json"
         if path=="/1/statuses/user_timeline.json":
             actor=(q.get("screen_name") or [s["handle"]])[0]
             feed=public("app.bsky.feed.getAuthorFeed",{"actor":actor,"limit":min(int((q.get("count") or [50])[0]),100)})
@@ -250,6 +348,94 @@ class Handler(BaseHTTPRequestHandler):
             actor=(q.get("screen_name") or [""])[0]
             if not actor: raise BridgeError(400,"screen_name is required")
             return 200,map_profile(public("app.bsky.actor.getProfile",{"actor":actor})),"application/json"
+        if path=="/1/users/lookup.json":
+            actors=(q.get("screen_name") or q.get("user_id") or [""])[0].split(",")
+            profiles=[]
+            for actor in actors[:25]:
+                if actor.strip():
+                    try: profiles.append(map_profile(public("app.bsky.actor.getProfile",{"actor":actor.strip()})))
+                    except BridgeError as e:
+                        if e.status not in (400,404): raise
+            return 200,profiles,"application/json"
+        if path=="/1/users/search.json":
+            term=(q.get("q") or [""])[0]
+            result=public("app.bsky.actor.searchActors",{"q":term,"limit":min(int((q.get("count") or [20])[0]),100)}) if term else {"actors":[]}
+            return 200,[map_profile(p) for p in result.get("actors",[])],"application/json"
+        if path=="/1/users/suggestions.json":
+            sug=session_request(c,s,"GET","app.bsky.actor.getSuggestions",{"limit":20})
+            return 200,[map_profile(p) for p in sug.get("actors",[])],"application/json"
+        if path=="/1/statuses/followers.json":
+            actor=(q.get("screen_name") or [s["did"]])[0]
+            result=public("app.bsky.graph.getFollowers",{"actor":actor,"limit":min(int((q.get("count") or [50])[0]),100)})
+            return 200,[map_profile(p) for p in result.get("followers",[])],"application/json"
+        if path=="/1/friendships/show.json":
+            other=(q.get("target_screen_name") or q.get("screen_name") or [""])[0]
+            if not other: raise BridgeError(400,"screen_name is required")
+            did=public("app.bsky.actor.getProfile",{"actor":other})["did"]
+            rel=public("app.bsky.graph.getRelationships",{"actor":s["did"],"others":[did]}).get("relationships",[{}])[0]
+            return 200,{"relationship":{"source":{"following":bool(rel.get("following")),"followed_by":bool(rel.get("followedBy"))},"target":{"id_str":str(legacy_id(did)),"screen_name":other}}},"application/json"
+        if path=="/1/friendships/create_all.json" and self.command=="POST":
+            p=self.body(); handles=(first_value(p,q,"screen_name") or first_value(p,q,"user_id")).split(",")
+            result=[]
+            for handle in handles[:20]:
+                if not handle.strip(): continue
+                actor=public("app.bsky.actor.getProfile",{"actor":handle.strip()})
+                existing=next((r for r in at_records(c,s,"app.bsky.graph.follow") if r.get("value",{}).get("subject")==actor["did"]),None)
+                if not existing:
+                    record={"$type":"app.bsky.graph.follow","subject":actor["did"],"createdAt":datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00","Z")}
+                    session_request(c,s,"POST","com.atproto.repo.createRecord",body={"repo":s["did"],"collection":"app.bsky.graph.follow","record":record})
+                result.append(map_profile(actor))
+            return 200,result,"application/json"
+        list_match=re.match(r"^/1/lists/(\d+)(?:/(members|subscribers|statuses))?\.json$",path)
+        if path in ("/1/lists.json","/1/lists/list.json","/1/lists/memberships.json","/1/lists/subscriptions.json") and self.command=="GET":
+            rows=c.execute("SELECT * FROM legacy_lists WHERE session_token=? ORDER BY id DESC",(s["token"],)).fetchall()
+            return 200,[legacy_list_object(r,c,s) for r in rows],"application/json"
+        if path=="/1/lists/create.json" and self.command=="POST":
+            p=self.body(); name=first_value(p,q,"name")
+            if not name: raise BridgeError(400,"name is required")
+            mode=first_value(p,q,"mode","private"); mode="public" if mode=="public" else "private"
+            cur=c.execute("INSERT INTO legacy_lists(session_token,name,mode,description) VALUES(?,?,?,?)",(s["token"],name,mode,first_value(p,q,"description")))
+            return 200,legacy_list_object(c.execute("SELECT * FROM legacy_lists WHERE id=?",(cur.lastrowid,)).fetchone(),c,s),"application/json"
+        if path=="/1/lists/update.json" and self.command in ("POST","PUT"):
+            p=self.body(); ident=first_value(p,q,"list_id") or first_value(p,q,"id"); row=c.execute("SELECT * FROM legacy_lists WHERE id=? AND session_token=?",(ident,s["token"])).fetchone()
+            if not row: raise BridgeError(404,"List not found")
+            c.execute("UPDATE legacy_lists SET name=?,mode=?,description=? WHERE id=?",(first_value(p,q,"name",row["name"]),first_value(p,q,"mode",row["mode"]),first_value(p,q,"description",row["description"]),ident))
+            return 200,legacy_list_object(c.execute("SELECT * FROM legacy_lists WHERE id=?",(ident,)).fetchone(),c,s),"application/json"
+        if path=="/1/lists/destroy.json" and self.command in ("POST","DELETE"):
+            p=self.body(); ident=first_value(p,q,"list_id") or first_value(p,q,"id")
+            c.execute("DELETE FROM legacy_list_members WHERE list_id IN (SELECT id FROM legacy_lists WHERE id=? AND session_token=?)",(ident,s["token"]))
+            c.execute("DELETE FROM legacy_lists WHERE id=? AND session_token=?",(ident,s["token"]))
+            return 200,{"destroyed":True},"application/json"
+        if path=="/1/lists/statuses.json" and self.command=="GET":
+            ident=(q.get("list_id") or [""])[0]
+            row=c.execute("SELECT * FROM legacy_lists WHERE id=? AND session_token=?",(ident,s["token"])).fetchone()
+            if not row: raise BridgeError(404,"List not found")
+            posts=[]
+            for m in c.execute("SELECT handle FROM legacy_list_members WHERE list_id=?",(ident,)):
+                posts.extend(mapped_posts(public("app.bsky.feed.getAuthorFeed",{"actor":m[0],"limit":20})))
+            posts.sort(key=lambda x:x.get("created_at",""),reverse=True)
+            return 200,remember_posts(c,posts[:100]),"application/json"
+        if list_match and self.command in ("GET","POST","DELETE"):
+            ident,sub=list_match.groups(); row=c.execute("SELECT * FROM legacy_lists WHERE id=? AND session_token=?",(ident,s["token"])).fetchone()
+            if not row: raise BridgeError(404,"List not found")
+            if sub=="members" and self.command in ("POST","DELETE"):
+                p=self.body(); handle=first_value(p,q,"screen_name")
+                if not handle: raise BridgeError(400,"screen_name is required")
+                actor=public("app.bsky.actor.getProfile",{"actor":handle})
+                if self.command=="POST": c.execute("INSERT OR REPLACE INTO legacy_list_members(list_id,did,handle) VALUES(?,?,?)",(ident,actor["did"],actor["handle"]))
+                else: c.execute("DELETE FROM legacy_list_members WHERE list_id=? AND did=?",(ident,actor["did"]))
+                return 200,{"list":legacy_list_object(row,c,s),"user":map_profile(actor)},"application/json"
+            if sub=="members":
+                return 200,[map_profile({"did":m[0],"handle":m[1]}) for m in c.execute("SELECT did,handle FROM legacy_list_members WHERE list_id=?",(ident,))],"application/json"
+            if sub=="statuses":
+                posts=[]
+                for m in c.execute("SELECT handle FROM legacy_list_members WHERE list_id=?",(ident,)):
+                    feed=public("app.bsky.feed.getAuthorFeed",{"actor":m[0],"limit":20})
+                    posts.extend(mapped_posts(feed).copy())
+                posts.sort(key=lambda x:x.get("created_at",""),reverse=True)
+                return 200,remember_posts(c,posts[:100]),"application/json"
+            if sub=="subscribers": return 200,[],"application/json"
+            return 200,legacy_list_object(row,c,s),"application/json"
         if path in ("/1/friendships/create.json","/1/friendships/destroy.json") and self.command in ("POST","DELETE"):
             handle=(q.get("screen_name") or [""])[0]
             if not handle: raise BridgeError(400,"screen_name is required")
@@ -270,6 +456,25 @@ class Handler(BaseHTTPRequestHandler):
                 rkey=existing["uri"].rsplit("/",1)[-1]
                 session_request(c,s,"POST","com.atproto.repo.deleteRecord",body={"repo":s["did"],"collection":"app.bsky.graph.follow","rkey":rkey})
             return 200,{"following":False,"screen_name":handle},"application/json"
+        if path=="/1/blocks/blocking.json" and self.command=="GET":
+            profiles=[]
+            for r in at_records(c,s,"app.bsky.graph.block"):
+                did=r.get("value",{}).get("subject")
+                if did:
+                    try: profiles.append(map_profile(public("app.bsky.actor.getProfile",{"actor":did})))
+                    except BridgeError: pass
+            return 200,profiles,"application/json"
+        if path in ("/1/blocks/create.json","/1/blocks/destroy.json") and self.command in ("POST","DELETE"):
+            p=self.body(); handle=first_value(p,q,"screen_name")
+            if not handle: raise BridgeError(400,"screen_name is required")
+            did=public("app.bsky.actor.getProfile",{"actor":handle})["did"]
+            existing=next((r for r in at_records(c,s,"app.bsky.graph.block") if r.get("value",{}).get("subject")==did),None)
+            if path.endswith("create.json") and not existing:
+                record={"$type":"app.bsky.graph.block","subject":did,"createdAt":datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00","Z")}
+                session_request(c,s,"POST","com.atproto.repo.createRecord",body={"repo":s["did"],"collection":"app.bsky.graph.block","record":record})
+            elif existing:
+                session_request(c,s,"POST","com.atproto.repo.deleteRecord",body={"repo":s["did"],"collection":"app.bsky.graph.block","rkey":existing["uri"].rsplit("/",1)[-1]})
+            return 200,map_profile(public("app.bsky.actor.getProfile",{"actor":did})),"application/json"
         raise BridgeError(404,"Unknown legacy API route")
     def log_message(self,fmt,*args):
         if urlparse(self.path).path=="/oauth/access_token":

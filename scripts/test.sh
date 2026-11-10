@@ -76,6 +76,11 @@ assert calls[-1][5]==api.CHAT_HEADERS
 dm=call('/1/direct_messages/new.json','POST',{'screen_name':'alice.bsky.social','text':'hello'},auth)
 assert dm['text']=='hello' and any(x[1]=='chat.bsky.convo.sendMessage' and x[5]==api.CHAT_HEADERS for x in calls)
 assert call('/1/63987262966206026/lists.json',token=auth)==[]
+assert call('/1/trends/1.json',token=auth)==[]
+saved=call('/1/saved_searches/create.json','POST',{'query':'Bluesky'},auth)
+assert saved['query']=='Bluesky' and call('/1/saved_searches.json',token=auth)[0]['id']==saved['id']
+created_list=call('/1/lists/create.json','POST',{'name':'friends','mode':'private'},auth)
+assert created_list['name']=='friends' and call('/1/lists/list.json',token=auth)[0]['id']==created_list['id']
 assert any(x[1]=='com.atproto.server.refreshSession' for x in calls)
 assert call('/1/statuses/user_timeline.json',params={'screen_name':'alice.bsky.social'},token=auth)[0]['text']=='A Bluesky post'
 assert call('/1/search/tweets.json',params={'q':'Bluesky'},token=auth)['statuses'][0]['text']=='A Bluesky post'
