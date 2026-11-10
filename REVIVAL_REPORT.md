@@ -43,8 +43,9 @@ and the server selector identify the replacement service.
   returns HTTP 410 with instructions to create a Bluesky account first.
 * **Still unavailable or different:** photo uploads and discontinued photo
   providers have no replacement integration; Twitter-specific trends, place
-  search, list subscriptions/subscribers, and some profile fields have no
-  direct Bluesky equivalent. Local lists are private SQLite data rather than
+  search, some profile fields, and Bluesky-native list subscriptions have no
+  direct equivalent. Tailstter provides local list membership and subscriber
+  compatibility data; local lists are private SQLite data rather than
   Bluesky-native lists. Search and post/profile data use Bluesky and are not
   Twitter data. The app's old 300-character composer and other Twitter-era
   assumptions do not override Bluesky's current account/schema limits.
