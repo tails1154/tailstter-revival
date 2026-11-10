@@ -36,6 +36,12 @@
 
     iget-object v1, p0, Lcom/twitter/android/AuthenticatorActivity;->b:Landroid/accounts/AccountManager;
 
+    # The old flow assumed the account already existed. After app-data
+    # clearing it may not; create it before storing the returned tokens.
+    const/4 v2, 0x0
+    const/4 v3, 0x0
+    invoke-virtual {v1, v0, v2, v3}, Landroid/accounts/AccountManager;->addAccountExplicitly(Landroid/accounts/Account;Ljava/lang/String;Landroid/os/Bundle;)Z
+
     const-string v2, "com.twitter.android.oauth.token"
 
     iget-object v3, p1, Lab;->b:Ljava/lang/String;
