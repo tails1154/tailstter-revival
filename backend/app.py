@@ -169,9 +169,17 @@ class Handler(BaseHTTPRequestHandler):
             rkey=found["uri"].rsplit("/",1)[-1]
             session_request(c,s,"POST","com.atproto.repo.deleteRecord",body={"repo":s["did"],"collection":"app.bsky.feed.post","rkey":rkey})
             return 200,{"id":target,"id_str":str(target),"deleted":True},"application/json"
-        if path=="/1/statuses/home_timeline.json":
+        if path in ("/1/statuses/home_timeline.json","/1/statuses/friends.json"):
             feed=session_request(c,s,"GET","app.bsky.feed.getTimeline",{"limit":min(int((q.get("count") or [50])[0]),100)})
             return 200,mapped_posts(feed),"application/json"
+        if path=="/1/statuses/mentions.json":
+            result=public("app.bsky.feed.searchPosts",{"q":"@"+s["handle"],"limit":min(int((q.get("count") or [50])[0]),100)})
+            mentions=[map_post({"post":p}) for p in result.get("posts",[]) if s["handle"].lower() in p.get("record",{}).get("text","").lower()]
+            return 200,mentions,"application/json"
+        if (path in ("/1/statuses/retweets_of_me.json","/1/direct_messages.json","/1/direct_messages/sent.json","/1/favorites.json") or re.match(r"^/1/\d+/lists(?:/subscriptions)?\.json$",path)) and self.command=="GET":
+            return 200,[],"application/json"
+        if path in ("/1/account/settings.json","/1/client_applications/configuration.json"):
+            return 200,{},"application/json"
         if path=="/1/statuses/user_timeline.json":
             actor=(q.get("screen_name") or [s["handle"]])[0]
             feed=public("app.bsky.feed.getAuthorFeed",{"actor":actor,"limit":min(int((q.get("count") or [50])[0]),100)})
