@@ -62,10 +62,14 @@ def get_session(c,authorization):
 def legacy_id(uri): return int.from_bytes(hashlib.sha256(uri.encode()).digest()[:7],"big")
 
 def twitter_date(value):
+    # The legacy client parses every created_at unconditionally.  Some AT
+    # records (notably profiles) have no timestamp, so always return a valid
+    # Twitter-format date instead of an empty string.
     try:
+        if not value: raise ValueError("missing date")
         dt=datetime.fromisoformat(value.replace("Z","+00:00")).astimezone(timezone.utc)
         return dt.strftime("%a %b %d %H:%M:%S +0000 %Y")
-    except Exception: return value or ""
+    except Exception: return "Thu Jan 01 00:00:00 +0000 1970"
 
 def map_profile(p):
     profile_id=legacy_id(p.get("did",p.get("handle","")))

@@ -24,6 +24,8 @@ an API hostname would not create a functional modern service integration.
   legacy search filters, signup inside the old app, and some old client routes.
   There is no Twitter data access.
 
+The timeline/profile crash found in device logcat was caused by empty `created_at` values, which the old client parses without a null check. The bridge now supplies a valid epoch fallback for missing or malformed dates. Feed and profile identifiers are mapped to numeric legacy IDs so old client models can parse them.
+
 ## Service configuration and security
 
 The server listens on `0.0.0.0:6483` by default; the APK's default bridge is
