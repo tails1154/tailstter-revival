@@ -1335,7 +1335,7 @@
     # Use the broad timeline view for the replacement Home feed. The legacy
     # home view groups rows by the original Twitter owner id and hides
     # federated authors even though sync returned them.
-    sget-object v0, Lcom/twitter/android/provider/ai;->j:Landroid/net/Uri;
+    sget-object v0, Lcom/twitter/android/provider/ai;->k:Landroid/net/Uri;
 
     iput-object v0, p0, Lcom/twitter/android/TimelineActivity;->b:Landroid/net/Uri;
 
